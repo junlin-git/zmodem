@@ -44,48 +44,47 @@ long Locbit = LLITOUT;	/* Bit SUPPOSED to disable output translations */
 #include <sys/sysmacros.h>
 
 static struct {
-	unsigned baudr;
-	speed_t speedcode;
+    unsigned baudr;
+    speed_t speedcode;
 } speeds[] = {
-	{110,	B110},
-	{300,	B300},
-	{600,	B600},
-	{1200,	B1200},
-	{2400,	B2400},
-	{4800,	B4800},
-	{9600,	B9600},
-	{19200,  B19200},
-	{38400,  B38400},
+{110,	B110},
+{300,	B300},
+{600,	B600},
+{1200,	B1200},
+{2400,	B2400},
+{4800,	B4800},
+{9600,	B9600},
+{19200,  B19200},
+{38400,  B38400},
 #ifdef B57600
-	{57600,  B57600},
+{57600,  B57600},
 #endif
 #ifdef B115200
-	{115200,  B115200},
+{115200,  B115200},
 #endif
 #ifdef B230400
-	{230400,  B230400},
+{230400,  B230400},
 #endif
 #ifdef B460800
-	{460800,  B460800},
+{460800,  B460800},
 #endif
 #ifdef EXTA
-	{19200,	EXTA},
+{19200,	EXTA},
 #endif
 #ifdef EXTB
-	{38400,	EXTB},
+{38400,	EXTB},
 #endif
-	{0, 0}
+{0, 0}
 };
 
-static unsigned
-getspeed(speed_t code)
+static unsigned getspeed(speed_t code)
 {
-	int n;
+    int n;
 
-	for (n=0; speeds[n].baudr; ++n)
-		if (speeds[n].speedcode == code)
-			return speeds[n].baudr;
-	return 38400;	/* Assume fifo if ioctl failed */
+    for (n=0; speeds[n].baudr; ++n)
+        if (speeds[n].speedcode == code)
+            return speeds[n].baudr;
+    return 38400;	/* Assume fifo if ioctl failed */
 }
 
 /*
@@ -94,31 +93,27 @@ getspeed(speed_t code)
  *  different line
  */
 int Fromcu;		/* Were called from cu or yam */
-int
-from_cu(void)
+int from_cu(void)
 {
-	struct stat a, b;
-	dev_t help=makedev(0,0);
+    struct stat a, b;
+    dev_t help=makedev(0,0);
 
-	/* in case fstat fails */
-	a.st_rdev=b.st_rdev=a.st_dev=b.st_dev=help;
+    /* in case fstat fails */
+    a.st_rdev=b.st_rdev=a.st_dev=b.st_dev=help;
 
-	fstat(1, &a); fstat(2, &b);
+    fstat(1, &a); fstat(2, &b);
 
-	if (major(a.st_rdev) != major(b.st_rdev)
-		|| minor(a.st_rdev) != minor(b.st_rdev))
-		Fromcu=1;
-	else if (major(a.st_dev) != major(b.st_dev)
-		|| minor(a.st_dev) != minor(b.st_dev))
-		Fromcu=1;
-	else
-		Fromcu=0;
+    if (major(a.st_rdev) != major(b.st_rdev)
+            || minor(a.st_rdev) != minor(b.st_rdev))
+        Fromcu=1;
+    else if (major(a.st_dev) != major(b.st_dev)
+             || minor(a.st_dev) != minor(b.st_dev))
+        Fromcu=1;
+    else
+        Fromcu=0;
 
-	return Fromcu;
+    return Fromcu;
 }
-
-
-
 
 /*
  *  Return non 0 if something to read from io descriptor f
@@ -126,10 +121,10 @@ from_cu(void)
 int
 rdchk(int fd)
 {
-	static long lf;
+    static long lf;
 
-	ioctl(fd, FIONREAD, &lf);
-	return ((int) lf);
+    ioctl(fd, FIONREAD, &lf);
+    return ((int) lf);
 }
 
 
@@ -143,86 +138,84 @@ struct termios oldtty, tty;
  *  0: restore original tty mode
  * Returns the output baudrate, or zero on failure
  */
-int
-io_mode(int fd, int n)
+int io_mode(int fd, int n)
 {
-	static int did0 = FALSE;
-	log_debug("mode:%d", n);
+    static int did0 = FALSE;
+    log_debug("mode:%d", n);
 
-	switch(n) {
+    switch(n) {
 
-	case 2:		/* Un-raw mode used by sz, sb when -g detected */
-		if(!did0) {
-			did0 = TRUE;
-			tcgetattr(fd,&oldtty);
-		}
-		tty = oldtty;
+    case 2:		/* Un-raw mode used by sz, sb when -g detected */
+        if(!did0) {
+            did0 = TRUE;
+            tcgetattr(fd,&oldtty);
+        }
+        tty = oldtty;
 
-		tty.c_iflag = BRKINT|IXON;
+        tty.c_iflag = BRKINT|IXON;
 
-		tty.c_oflag = 0;	/* Transparent output */
+        tty.c_oflag = 0;	/* Transparent output */
 
-		tty.c_cflag &= ~PARENB;	/* Disable parity */
-		tty.c_cflag |= CS8;	/* Set character size = 8 */
-		tty.c_lflag =  0;
-		tty.c_cc[VINTR] = -1;	/* Interrupt char */
+        tty.c_cflag &= ~PARENB;	/* Disable parity */
+        tty.c_cflag |= CS8;	/* Set character size = 8 */
+        tty.c_lflag =  0;
+        tty.c_cc[VINTR] = -1;	/* Interrupt char */
 #ifdef _POSIX_VDISABLE
-		if (((int) _POSIX_VDISABLE)!=(-1)) {
-			tty.c_cc[VQUIT] = _POSIX_VDISABLE;		/* Quit char */
-		} else {
-			tty.c_cc[VQUIT] = -1;			/* Quit char */
-		}
+        if (((int) _POSIX_VDISABLE)!=(-1)) {
+            tty.c_cc[VQUIT] = _POSIX_VDISABLE;		/* Quit char */
+        } else {
+            tty.c_cc[VQUIT] = -1;			/* Quit char */
+        }
 #else
-		tty.c_cc[VQUIT] = -1;			/* Quit char */
+        tty.c_cc[VQUIT] = -1;			/* Quit char */
 #endif
-		tty.c_cc[VMIN] = 1;
-		tty.c_cc[VTIME] = 1;	/* or in this many tenths of seconds */
+        tty.c_cc[VMIN] = 1;
+        tty.c_cc[VTIME] = 1;	/* or in this many tenths of seconds */
 
-		tcsetattr(fd,TCSADRAIN,&tty);
+        tcsetattr(fd,TCSADRAIN,&tty);
 
-		return getspeed(cfgetospeed(&tty));
-	case 1:
-	case 3:
-		if(!did0) {
-			did0 = TRUE;
-			tcgetattr(fd,&oldtty);
-		}
-		tty = oldtty;
+        return getspeed(cfgetospeed(&tty));
+    case 1:
+    case 3:
+        if(!did0) {
+            did0 = TRUE;
+            tcgetattr(fd,&oldtty);
+        }
+        tty = oldtty;
 
-		tty.c_iflag = IGNBRK;
-		if (n==3) /* with flow control */
-			tty.c_iflag |= IXOFF;
+        tty.c_iflag = IGNBRK;
+        if (n==3) /* with flow control */
+            tty.c_iflag |= IXOFF;
 
-		 /* No echo, crlf mapping, INTR, QUIT, delays, no erase/kill */
-		tty.c_lflag &= ~(ECHO | ICANON | ISIG);
-		tty.c_oflag = 0;	/* Transparent output */
+        /* No echo, crlf mapping, INTR, QUIT, delays, no erase/kill */
+        tty.c_lflag &= ~(ECHO | ICANON | ISIG);
+        tty.c_oflag = 0;	/* Transparent output */
 
-		tty.c_cflag &= ~(PARENB);	/* Same baud rate, disable parity */
-		/* Set character size = 8 */
-		tty.c_cflag &= ~(CSIZE);
-		tty.c_cflag |= CS8;
-		tty.c_cc[VMIN] = 1; /* This many chars satisfies reads */
-		tty.c_cc[VTIME] = 1;	/* or in this many tenths of seconds */
-		tcsetattr(fd,TCSADRAIN,&tty);
-		return getspeed(cfgetospeed(&tty));
-	case 0:
-		if(!did0)
-			return 0;
-		tcdrain (fd); /* wait until everything is sent */
-		tcflush (fd,TCIOFLUSH); /* flush input queue */
-		tcsetattr (fd,TCSADRAIN,&oldtty);
-		tcflow (fd,TCOON); /* restart output */
+        tty.c_cflag &= ~(PARENB);	/* Same baud rate, disable parity */
+        /* Set character size = 8 */
+        tty.c_cflag &= ~(CSIZE);
+        tty.c_cflag |= CS8;
+        tty.c_cc[VMIN] = 1; /* This many chars satisfies reads */
+        tty.c_cc[VTIME] = 1;	/* or in this many tenths of seconds */
+        tcsetattr(fd,TCSADRAIN,&tty);
+        return getspeed(cfgetospeed(&tty));
+    case 0:
+        if(!did0)
+            return 0;
+        tcdrain (fd); /* wait until everything is sent */
+        tcflush (fd,TCIOFLUSH); /* flush input queue */
+        tcsetattr (fd,TCSADRAIN,&oldtty);
+        tcflow (fd,TCOON); /* restart output */
 
-		return getspeed(cfgetospeed(&tty));
-	default:
-		return 0;
-	}
+        return getspeed(cfgetospeed(&tty));
+    default:
+        return 0;
+    }
 }
 
-void
-sendbrk(int fd)
+void sendbrk(int fd)
 {
-	tcsendbreak(fd,0);
+    tcsendbreak(fd,0);
 }
 
 

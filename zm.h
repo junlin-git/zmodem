@@ -4,8 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "_zmodem.h"
-
+#include "zmodem.h"
 #define ZCRC_DIFFERS (ERROR+1)
 #define ZCRC_EQUAL (ERROR+2)
 
@@ -17,34 +16,34 @@
 extern int bytes_per_error;  /* generate one error around every x bytes */
 
 struct zm_ {
-	zreadline_t *zr;	/* Buffered, interruptable input. */
-	char Rxhdr[4];		/* Received header */
-	char Txhdr[4];		/* Transmitted header */
-	int rxtimeout;          /* Constant: tenths of seconds to wait for something */
-	int znulls;             /* Constant: Number of nulls to send at beginning of ZDATA hdr */
-	int eflag;              /* Constant: local display of non zmodem characters */
-				/* 0:  no display */
-				/* 1:  display printing characters only */
-				/* 2:  display all non ZMODEM characters */
-	int baudrate;		/* Constant: in bps */
-	int zrwindow;		/* RX window size (controls garbage count) */
+    zreadline_t *zr;	/* Buffered, interruptable input. */
+    char Rxhdr[4];		/* Received header */
+    char Txhdr[4];		/* Transmitted header */
+    int rxtimeout;          /* Constant: tenths of seconds to wait for something */
+    int znulls;             /* Constant: Number of nulls to send at beginning of ZDATA hdr */
+    int eflag;              /* Constant: local display of non zmodem characters */
+    /* 0:  no display */
+    /* 1:  display printing characters only */
+    /* 2:  display all non ZMODEM characters */
+    int baudrate;		/* Constant: in bps */
+    int zrwindow;		/* RX window size (controls garbage count) */
 
-	int zctlesc;            /* Variable: TRUE means to encode control characters */
-	int txfcs32;            /* Variable: TRUE means send binary frames with 32 bit FCS */
+    int zctlesc;            /* Variable: TRUE means to encode control characters */
+    int txfcs32;            /* Variable: TRUE means send binary frames with 32 bit FCS */
 
-	int rxtype;		/* State: type of header received */
-	char escape_sequence_table[256]; /* State: conversion chart for zmodem escape sequence encoding */
-	char lastsent;		/* State: last byte send */
-	int crc32t;             /* State: display flag indicating 32-bit CRC being sent */
-	int crc32;              /* State: display flag indicating 32 bit CRC being received */
-	int rxframeind;	        /* State: ZBIN, ZBIN32, or ZHEX type of frame received */
-	int zmodem_requested;
+    int rxtype;		/* State: type of header received */
+    char escape_sequence_table[256]; /* State: conversion chart for zmodem escape sequence encoding */
+    char lastsent;		/* State: last byte send */
+    int crc32t;             /* State: display flag indicating 32-bit CRC being sent */
+    int crc32;              /* State: display flag indicating 32 bit CRC being received */
+    int rxframeind;	        /* State: ZBIN, ZBIN32, or ZHEX type of frame received */
+    int zmodem_requested;
 };
 
 typedef struct zm_ zm_t;
 
 zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
-	      int rxtimeout, int znulls, int eflag, int baudrate, int zctlesc, int zrwindow);
+              int rxtimeout, int znulls, int eflag, int baudrate, int zctlesc, int zrwindow);
 int zm_get_zctlesc(zm_t *zm);
 void zm_set_zctlesc(zm_t *zm, int zctlesc);
 void zm_escape_sequence_update(zm_t *zm);

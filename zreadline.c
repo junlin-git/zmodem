@@ -25,23 +25,18 @@
 /* once part of lrz.c, taken out to be useful to lsz.c too */
 
 #include "zglobal.h"
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
 #include <ctype.h>
 #include <errno.h>
 
-#include "log.h"
-
 /* Ward Christensen / CP/M parameters - Don't change these! */
 #define TIMEOUT (-2)
 
-static int
-readline_internal(zreadline_t *zr, unsigned int timeout);
+static int readline_internal(zreadline_t *zr, unsigned int timeout);
 
-zreadline_t *
-zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeout)
+zreadline_t *zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeout)
 {
 	zreadline_t *zr = (zreadline_t *) malloc (sizeof(zreadline_t));
 	memset (zr, 0, sizeof(zreadline_t));
@@ -56,8 +51,7 @@ zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeout)
 	return zr;
 }
 
-int
-zreadline_getc(zreadline_t *zr, int timeout)
+int zreadline_getc(zreadline_t *zr, int timeout)
 {
 	zr->readline_left --;
 	if (zr->readline_left >= 0) {
@@ -69,8 +63,7 @@ zreadline_getc(zreadline_t *zr, int timeout)
 		return readline_internal(zr, timeout);
 }
 
-static void
-zreadline_alarm_handler(int dummy LRZSZ_ATTRIB_UNUSED)
+static void zreadline_alarm_handler(int dummy LRZSZ_ATTRIB_UNUSED)
 {
 	/* doesn't need to do anything */
 }
@@ -81,8 +74,7 @@ zreadline_alarm_handler(int dummy LRZSZ_ATTRIB_UNUSED)
  *
  * timeout is in tenths of seconds
  */
-static int
-readline_internal(zreadline_t *zr, unsigned int timeout)
+static int readline_internal(zreadline_t *zr, unsigned int timeout)
 {
 	if (!zr->no_timeout)
 	{
@@ -118,23 +110,20 @@ readline_internal(zreadline_t *zr, unsigned int timeout)
 }
 
 
-void
-zreadline_flush(zreadline_t *zr)
+void zreadline_flush(zreadline_t *zr)
 {
 	zr->readline_left=0;
 	return;
 }
 
-void
-zreadline_flushline(zreadline_t *zr)
+void zreadline_flushline(zreadline_t *zr)
 {
   zr->readline_left = 0;
   lseek(zr->readline_fd, 0, SEEK_END);
 }
 
 /* send cancel string to get the other end to shut up */
-void
-zreadline_canit (zreadline_t *zr, int fd)
+void zreadline_canit (zreadline_t *zr, int fd)
 {
 	static char canistr[] =
 	{

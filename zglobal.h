@@ -24,7 +24,6 @@
   02111-1307, USA.
 */
 
-#include "config.h"
 #include <sys/types.h>
 #include <stdarg.h>
 #include <sys/time.h>
@@ -38,7 +37,11 @@
 #include <locale.h>
 #include <unistd.h>
 #include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include "zreadline.h"
+#include "log.h"
 #if ENABLE_NLS
 #include "gettext.h"
 # define _(Text) gettext (Text)
@@ -58,7 +61,7 @@
 # define LRZSZ_ATTRIB_CONST  __attribute__((__const__))
 #endif
 
-    /* gcc.info sagt, noreturn wäre ab 2.5 verfügbar. HPUX-gcc 2.5.8
+/* gcc.info sagt, noreturn wäre ab 2.5 verfügbar. HPUX-gcc 2.5.8
      * kann es noch nicht - what's this?
      */
 #if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ > 5)
@@ -134,18 +137,18 @@
 
 
 enum zm_type_enum {
-	ZM_ZMODEM
+    ZM_ZMODEM
 };
 
 struct zm_fileinfo {
-	char *fname;
-	time_t modtime;
-	mode_t mode;
-	size_t bytes_total;
-	size_t bytes_sent;
-	size_t bytes_received;
-	size_t bytes_skipped; /* crash recovery */
-	int    eof_seen;
+    char *fname;
+    time_t modtime;
+    mode_t mode;
+    size_t bytes_total;
+    size_t bytes_sent;
+    size_t bytes_received;
+    size_t bytes_skipped; /* crash recovery */
+    int    eof_seen;
 };
 
 #define R_BYTESLEFT(x) ((x)->bytes_total-(x)->bytes_received)

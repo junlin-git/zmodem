@@ -4,12 +4,12 @@
 #include <stddef.h>
 
 struct zreadline_ {
-	char *readline_ptr; /* pointer for removing chars from linbuf */
-	int readline_left; /* number of buffered chars left to read */
-	size_t readline_readnum;
-	int readline_fd;
-	char *readline_buffer;
-	int no_timeout; 	/* when true, readline does not timeout */
+    char *readline_ptr; /* pointer for removing chars from linbuf */
+    int readline_left; /* number of buffered chars left to read */
+    size_t readline_readnum;
+    int readline_fd;
+    char *readline_buffer;
+    int no_timeout; 	/* when true, readline does not timeout */
 };
 
 typedef struct zreadline_ zreadline_t;
