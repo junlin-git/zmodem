@@ -16,8 +16,6 @@ SOURCES += \
     log.c \
     lrz.c \
     lsz.c \
-    mrz.c \
-    msz.c \
     rbsb.c \
     tcp.c \
     timing.c \

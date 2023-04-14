@@ -50,8 +50,7 @@ unsigned short crctab[256] = {
  * Omen Technology.
  */
 
-unsigned short
-updcrc(unsigned short cp, unsigned short crc)
+unsigned short updcrc(unsigned short cp, unsigned short crc)
 {
     return crctab[((crc >> 8) & 255u)] ^ (crc << 8) ^ cp;
 }

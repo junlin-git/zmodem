@@ -8,28 +8,6 @@
 extern "C" {
 #endif
 
-/* zmodem.h - ZMODEM protocol constants
-
-  Copyright (C) until 1998 Chuck Forsberg (OMEN Technology Inc)
-  Copyright (C) 1996, 1997 Uwe Ohse
-
-  This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2, or (at your option)
-  any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-  02111-1307, USA.
-
- *    05-23-87  Chuck Forsberg Omen Technology Inc
-*/
 #define ZPAD '*'	/* 052 Padding character begins frames */
 
 /* Spec 7.2: The ZDLE character is special. ZDLE represents a control
@@ -147,102 +125,6 @@ extern "C" {
 
 /* Flags */
 #define RZSZ_FLAGS_NONE (0x0000)
-
-/* This runs a zmodem receiver.
-
-   DIRECTORY is the root directory to which files will be downloaded,
-   if those files are specified with a relative path.
-
-   DIRECTORY may be NULL.  If DIRECTORY is NULL, the current working
-   directory is used.
-
-   APPROVER is a callback function. It is called when a file transfer
-   request is received from the sender.  It must return 'true' to
-   approve a download of the file. It is up to APPROVER to decide if
-   filenames are appropriate, if absolute paths are allowed, if files
-   are too large or small, and if existing files may be overwritten.
-
-   APPROVER may be NULL.  If APPROVER is NULL, all files with relative
-   pathnames will be approved -- even if they overwrite existing files
-   -- and all files with absolute pathnames will be rejected.
-
-   TICK is a callback function.  It is called after each packet is
-   received from the sender.  If it returns 'true', the zmodem fetch
-   will continue.  If it returns 'false', the zmodem fetch will
-   terminate.  It should return quickly.
-
-   If TICK is NULL, the transfer will continue until completion, unless
-   the MIN_BPS check fails.
-
-   COMPLETE is a callback function.  It is called when a file download
-   has completed, either successfully or unsuccessfully. It should
-   return quickly.  The RESULT parameter will return a result code
-   indicating if the transfer was successful.
-
-   COMPLETE may be NULL, meaning that completion data is ignored.
-
-   MIN_BPS is the minimum data transfer rate that will be tolerated,
-   in bits per second.  If the sender transfers data slower than
-   MIN_BPS, the fetch will terminate.
-
-   If MIN_BPS is zero, this check will be disabled.
-
-   FLAGS determine how this zmodem receiver operates.
-
-   The return value is the sum of the sizes of the files successfully
-   transfered. */
-size_t zmodem_receive(const char *directory,
-                      bool (*approver)(const char *filename, size_t size, time_t date),
-                      bool tick_cb(const char *fname, long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left),
-                      void (*complete)(const char *filename, int result, size_t size, time_t date),
-                      uint64_t min_bps,
-                      uint32_t flags);
-
-/* This runs a zmodem receiver.
-
-   DIRECTORY is the root directory from which files will be downloaded,
-   if those files are specified with a relative path.
-
-   If DIRECTORY is null, the current working directory is used.
-
-   FILE_COUNT is the number of files to be transferred, and FILE_LIST
-   is an array of strings that contains their (relative or absolute)
-   pathnames.
-
-   FILE_COUNT must be 1 or greater, and FILE_LIST must be valid,
-   otherwise the result is unspecified.
-
-   TICK is a callback function.  It is called after each packet is
-   sent.  If it returns 'true', the zmodem send will continue.  If it
-   returns 'false', the zmodem send will terminate prematurely.  It
-   should return quickly.
-
-   TICK may be NULL.  If TICK is NULL, the send will continue until
-   completion, unless the MIN_BPS check fails.
-
-   COMPLETE is a callback function.  It is called when a file download
-   has completed, either successfully or unsuccessfully. It should
-   return quickly.  The RESULT parameter will indicate if the send was
-   successful.
-
-   COMPLETE may be NULL.
-
-   MIN_BPS is the minimum data transfer rate that will be tolerated.
-   If the sender transfers data slower than MIN_BPS, the fetch
-   will terminate.
-
-   If MIN_BPS is zero, this test will be disabled.
-
-   FLAGS determine how this zmodem sender operates.
-
-   The return value is the sum of the sizes of the files successfully
-   transfered. */
-size_t zmodem_send(int file_count,
-                   char **file_list,
-                   bool (*tick)(long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left),
-                   void (*complete)(const char *filename, int result, size_t size, time_t date),
-                   uint64_t min_bps,
-                   uint32_t flags);
 
 #ifdef __cplusplus
 }

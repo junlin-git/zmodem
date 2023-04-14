@@ -1,30 +1,3 @@
-/*
-  lsz - send files with x/y/zmodem
-  Copyright (C) until 1988 Chuck Forsberg (Omen Technology INC)
-  Copyright (C) 1994 Matt Porter, Michael D. Black
-  Copyright (C) 1996, 1997 Uwe Ohse
-  Copyright (C) 2018 Michael L. Gran
-
-  This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2, or (at your option)
-  any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-  02111-1307, USA.
-
-  originally written by Chuck Forsberg
-*/
-
-/* char *getenv(); */
-
 #define SS_NORMAL 0
 #include <stdio.h>
 #include <stdlib.h>
@@ -208,12 +181,11 @@ static void onintr(int n LRZSZ_ATTRIB_UNUSED)
     // longjmp(sz->intrjmp, -1);
 }
 
-size_t zmodem_send(int file_count,
+static size_t zmodem_send(int file_count,
                    char **file_list,
                    bool (*tick)(long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left),
-                   void (*complete)(const char *filename, int result, size_t size, time_t date),
-                   uint64_t min_bps,
-                   uint32_t flags)
+                   void (*complete)(const char *filename, int result, size_t size, time_t date)
+                          )
 {
     log_set_level(LOG_ERROR);
     sz_t *sz = sz_init(0, /* fd */
@@ -1612,5 +1584,41 @@ static int sz_getinsync(sz_t *sz, struct zm_fileinfo *zi, int flag)
 
 
 
+static bool tick_cb(long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left)
+{
+    static long last_sec_left = 0;
+    if (last_sec_left != sec_left && sec_left != 0) {
+        fprintf(stderr, "Bytes Sent:%7ld/%7ld   BPS:%-8ld ETA %02d:%02d\n",
+                 bytes_sent, bytes_total,
+                last_bps, min_left, sec_left);
+        last_sec_left = sec_left;
+    }
+    usleep(10000);
+    return true;
+}
+
+static void complete_cb(const char *filename, int result, size_t size, time_t date)
+{
+    if (result == RZSZ_NO_ERROR)
+        fprintf(stderr, "'%s (%zu bytes)': successful send\n", filename, size);
+    else
+        fprintf(stderr, "'%s': failed to send\n", filename);
+}
+
+int main(int argc, char *argv[])
+{
+    char **filenames= NULL;
+    if (!argv[1])
+    {
+        fprintf(stderr, "No files to send.\n");
+        return 0;
+    }
+
+    size_t bytes = zmodem_send(1, filenames,
+                               &tick_cb,
+                               &complete_cb);
+    fprintf(stderr, "Sent %zu bytes.\n", bytes);
+    return 0;
+}
 
 /* End of lsz.c */

@@ -1,32 +1,3 @@
-/*
-  rbsb.c - terminal handling stuff for lrzsz
-  Copyright (C) until 1988 Chuck Forsberg (Omen Technology INC)
-  Copyright (C) 1994 Matt Porter, Michael D. Black
-  Copyright (C) 1996, 1997 Uwe Ohse
-  Copyright (C) 2018 Michael L. Gran
-
-  This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2, or (at your option)
-  any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-  02111-1307, USA.
-
-  originally written by Chuck Forsberg
-*/
-
-/*
- *  Rev 05-05-1988
- *  ============== (not quite, but originated there :-). -- uwe
- */
 #include "zglobal.h"
 
 #include <stdio.h>
@@ -118,8 +89,7 @@ int from_cu(void)
 /*
  *  Return non 0 if something to read from io descriptor f
  */
-int
-rdchk(int fd)
+int rdchk(int fd)
 {
     static long lf;
 

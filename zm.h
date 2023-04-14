@@ -15,7 +15,7 @@
 
 extern int bytes_per_error;  /* generate one error around every x bytes */
 
-struct zm_ {
+typedef struct zm_ {
     zreadline_t *zr;	/* Buffered, interruptable input. */
     char Rxhdr[4];		/* Received header */
     char Txhdr[4];		/* Transmitted header */
@@ -38,9 +38,7 @@ struct zm_ {
     int crc32;              /* State: display flag indicating 32 bit CRC being received */
     int rxframeind;	        /* State: ZBIN, ZBIN32, or ZHEX type of frame received */
     int zmodem_requested;
-};
-
-typedef struct zm_ zm_t;
+}zm_t;
 
 zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
               int rxtimeout, int znulls, int eflag, int baudrate, int zctlesc, int zrwindow);

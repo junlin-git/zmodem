@@ -137,7 +137,7 @@ rz_t *rz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
               bool tick_cb(const char *fname, long bytes_sent, long bytes_total,
                            long last_bps, int min_left, int sec_left),
               void complete_cb(const char *filename, int result, size_t size, time_t date),
-              bool approver_cb(const char *filename, size_t size, time_t date)
+              bool (*approver_cb)(const char *filename, size_t size, time_t date)
               );
 
 
@@ -168,7 +168,7 @@ rz_t* rz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
         bool tick_cb(const char *fname, long bytes_sent, long bytes_total,
                      long last_bps, int min_left, int sec_left),
         void complete_cb(const char *filename, int result, size_t size, time_t date),
-        bool approver_cb(const char *filename, size_t size, time_t date)
+        bool (*approver_cb)(const char *filename, size_t size, time_t date)
         )
 {
     rz_t *rz = (rz_t *)malloc(sizeof(rz_t));
@@ -222,12 +222,11 @@ static void bibi(int n)
  * Let's receive something already.
  */
 
-size_t zmodem_receive(const char *directory,
-                      bool approver_cb(const char *filename, size_t size, time_t date),
-                      bool tick_cb(const char *fname, long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left),
-                      void complete_cb(const char *filename, int result, size_t size, time_t date),
-                      uint64_t min_bps,
-                      uint32_t flags)
+static size_t zmodem_receive(const char *directory,
+                      bool (*approver_cb)(const char *filename, size_t size, time_t date),
+                      bool (*tick_cb)(const char *fname, long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left),
+                      void (*complete_cb)(const char *filename, int result, size_t size, time_t date)
+                      )
 {
     log_set_level(LOG_ERROR);
     rz_t *rz = rz_init(0, /* fd */
@@ -1092,7 +1091,7 @@ typedef struct oosb_t {
     char *data;
     struct oosb_t *next;
 } oosb_t;
-struct oosb_t *anker=NULL;
+oosb_t *anker=NULL;
 
 /*
  * Receive a file with ZMODEM protocol
@@ -1405,6 +1404,45 @@ static int rz_closeit(rz_t *rz, struct zm_fileinfo *zi)
 static size_t getfree(void)
 {
     return((size_t) (~0L));	/* many free bytes ... */
+}
+
+static bool approver_cb(const char *filename, size_t size, time_t date)
+{
+    fprintf(stderr, "Sender requests to send %s: %zu bytes\n", filename, size);
+    return true;
+}
+
+static bool tick_cb(const char *fname, long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left)
+{
+    static long last_sec_left = 0;
+    if (last_sec_left != sec_left && sec_left != 0) {
+        fprintf(stderr, "%s: Bytes Received:%7ld/%7ld   BPS:%-8ld ETA %02d:%02d\n",
+                fname, bytes_sent, bytes_total,
+                last_bps, min_left, sec_left);
+        last_sec_left = sec_left;
+    }
+    usleep(10000);
+    return true;
+}
+
+
+static void complete_cb(const char *filename, int result, size_t size, time_t date)
+{
+    if (result == RZSZ_NO_ERROR)
+        fprintf(stderr, "'%s': received\n", filename);
+    else
+        fprintf(stderr, "'%s': failed to receive\n", filename);
+}
+
+int main(int argc, char *argv[])
+{
+
+    size_t bytes = zmodem_receive(NULL, /* use current directory */
+                                  &approver_cb, /* receive everything */
+                                  &tick_cb,
+                                  &complete_cb);
+    fprintf(stderr, "Received %zu bytes.\n", bytes);
+    return 0;
 }
 
 /* End of lrz.c */
