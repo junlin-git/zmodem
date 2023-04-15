@@ -16,13 +16,13 @@
 #include <sys/mman.h>
 #include "timing.h"
 #include "log.h"
-#include "zmodem.h"
+#include "zm.h"
 #include "crctab.h"
 #include "zm.h"
 
 #define MAX_BLOCK 8192
 
-struct sz_ {
+typedef struct sz_ {
     zm_t *zm;		/* zmodem comm primitives' state */
     // state
     char txbuf[MAX_BLOCK];
@@ -83,11 +83,9 @@ struct sz_ {
     bool (*tick_cb)(long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left);
 
 
-};
+} sz_t;
 
-typedef struct sz_ sz_t;
-
-static sz_t*sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
+static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
         int rxtimeout, int znulls, int eflag, int baudrate, int zctlesc, int zrwindow,
         char lzconv, char lzmanag, int lskipnocor, int tcp_flag, unsigned txwindow, unsigned txwspac,
         int under_rsh, int no_unixmode, int canseek, int restricted,
@@ -217,7 +215,7 @@ static size_t zmodem_send(int file_count,
                        0,	  /* stop_time */
                        0,	  /* min_bps */
                        0,	  /* min_bps_time */
-                       0x0,	  /* tcp_server_address */
+                       0,	  /* tcp_server_address */
                        -1,	  /* tcp_socket */
                        0,	  /* hyperterm */
                        complete,  /* file complete callback */

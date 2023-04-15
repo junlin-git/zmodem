@@ -22,9 +22,6 @@
 
   originally written by Chuck Forsberg
 */
-
-#include "zglobal.h"
-
 #define SS_NORMAL 0
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,9 +35,10 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
+
+#include "zglobal.h"
 #include "timing.h"
 #include "log.h"
-#include "zmodem.h"
 #include "crctab.h"
 #include "zm.h"
 
@@ -797,8 +795,7 @@ buffer_it:
  *  If not in binary mode, carriage returns, and all characters
  *  starting with CPMEOF are discarded.
  */
-static int
-rz_write_string_to_file(rz_t *rz, struct zm_fileinfo *zi, char *buf, size_t n)
+static int rz_write_string_to_file(rz_t *rz, struct zm_fileinfo *zi, char *buf, size_t n)
 {
     char *p;
 

@@ -1,6 +1,3 @@
-DISTFILES += \
-    Makefile
-
 HEADERS += \
     crctab.h \
     gettext.h \
@@ -8,7 +5,6 @@ HEADERS += \
     timing.h \
     zglobal.h \
     zm.h \
-    zmodem.h \
     zreadline.h
 
 SOURCES += \
