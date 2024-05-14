@@ -187,6 +187,13 @@ void zm_saybibi(zm_t *zm);
 int zm_do_crc_check(zm_t *zm, FILE *f, size_t remote_bytes, size_t check_bytes);
 
 
+double timing (int reset, time_t *nowp);
+
+
+#define log_info printf
+#define log_error printf
+#define log_trace printf
+#define log_fatal printf
 #ifdef __cplusplus
 }
 #endif

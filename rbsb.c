@@ -1,8 +1,7 @@
 #include "zglobal.h"
-
 #include <stdio.h>
 #include <errno.h>
-#include "log.h"
+
 
 #ifdef USE_SGTTY
 #  ifdef LLITOUT
@@ -58,33 +57,6 @@ static unsigned getspeed(speed_t code)
     return 38400;	/* Assume fifo if ioctl failed */
 }
 
-/*
- * return 1 if stdout and stderr are different devices
- *  indicating this program operating with a modem on a
- *  different line
- */
-int Fromcu;		/* Were called from cu or yam */
-int from_cu(void)
-{
-    struct stat a, b;
-    dev_t help=makedev(0,0);
-
-    /* in case fstat fails */
-    a.st_rdev=b.st_rdev=a.st_dev=b.st_dev=help;
-
-    fstat(1, &a); fstat(2, &b);
-
-    if (major(a.st_rdev) != major(b.st_rdev)
-            || minor(a.st_rdev) != minor(b.st_rdev))
-        Fromcu=1;
-    else if (major(a.st_dev) != major(b.st_dev)
-             || minor(a.st_dev) != minor(b.st_dev))
-        Fromcu=1;
-    else
-        Fromcu=0;
-
-    return Fromcu;
-}
 
 /*
  *  Return non 0 if something to read from io descriptor f

@@ -14,8 +14,7 @@
 #include <stdbool.h>
 
 #include <sys/mman.h>
-#include "timing.h"
-#include "log.h"
+
 #include "zm.h"
 #include "crctab.h"
 #include "zm.h"
@@ -52,8 +51,6 @@ typedef struct sz_ {
     int rxflags2;
     int exitcode;
     time_t stop_time;
-    char *tcp_server_address;
-    int tcp_socket;
     int error_count;
     jmp_buf intrjmp;	/* For the interrupt on RX CAN */
     int zrqinits_sent;
@@ -63,7 +60,6 @@ typedef struct sz_ {
     char lzconv;	/* Local ZMODEM file conversion request */
     char lzmanag;	/* Local ZMODEM file management request */
     int lskipnocor;
-    int tcp_flag;
     int no_unixmode;
     int filesleft;
     int restricted;
@@ -87,12 +83,12 @@ typedef struct sz_ {
 
 static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
         int rxtimeout, int znulls, int eflag, int baudrate, int zctlesc, int zrwindow,
-        char lzconv, char lzmanag, int lskipnocor, int tcp_flag, unsigned txwindow, unsigned txwspac,
+        char lzconv, char lzmanag, int lskipnocor, unsigned txwindow, unsigned txwspac,
         int under_rsh, int no_unixmode, int canseek, int restricted,
         int fullname, unsigned blkopt, int tframlen, int wantfcs32,
         size_t max_blklen, size_t start_blklen, time_t stop_time,
         long min_bps, long min_bps_time,
-        char *tcp_server_address, int tcp_socket, int hyperterm,
+        int hyperterm,
         void (*complete_cb)(const char *filename, int result, size_t size, time_t date),
         bool (*tick_cb)(long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left)
         )
@@ -105,7 +101,6 @@ static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     sz->lzmanag = lzmanag;
     sz->lskipnocor = lskipnocor;
     sz->mm_addr = NULL;
-    sz->tcp_flag = tcp_flag;
     sz->txwindow = txwindow;
     sz->txwspac = txwspac;
     sz->txwcnt = 0;
@@ -124,11 +119,6 @@ static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     sz->stop_time = stop_time;
     sz->min_bps = min_bps;
     sz->min_bps_time = min_bps_time;
-    if (tcp_server_address)
-        sz->tcp_server_address = strdup(tcp_server_address);
-    else
-        sz->tcp_server_address = NULL;
-    sz->tcp_socket = tcp_socket;
     sz->hyperterm = hyperterm;
     sz->complete_cb = complete_cb;
     sz->tick_cb = tick_cb;
@@ -169,14 +159,11 @@ static char Myattn[] = { 0 };
 
 #define MK_STRING(x) #x
 
-const char *program_name = "sz";
-
 /* Called when ZMODEM gets an interrupt (^C) */
-static void onintr(int n LRZSZ_ATTRIB_UNUSED)
+static void onintr(int n )
 {
     signal(SIGINT, SIG_IGN);
-    // FIXME: how do I work around this?
-    // longjmp(sz->intrjmp, -1);
+
 }
 
 static size_t zmodem_send(int file_count,
@@ -185,7 +172,6 @@ static size_t zmodem_send(int file_count,
                    void (*complete)(const char *filename, int result, size_t size, time_t date)
                           )
 {
-    log_set_level(LOG_ERROR);
     sz_t *sz = sz_init(0, /* fd */
                        128, /* readnum */
                        256, /* bufsize */
@@ -199,7 +185,6 @@ static size_t zmodem_send(int file_count,
                        0,	  /* lzconv */
                        0,	  /* lzmanag */
                        0,	  /* lskipnocor */
-                       0,	  /* tcp_flag */
                        0,	  /* txwindow */
                        0,	  /* txwspac */
                        0,	  /* under_rsh */
@@ -215,8 +200,6 @@ static size_t zmodem_send(int file_count,
                        0,	  /* stop_time */
                        0,	  /* min_bps */
                        0,	  /* min_bps_time */
-                       0,	  /* tcp_server_address */
-                       -1,	  /* tcp_socket */
                        0,	  /* hyperterm */
                        complete,  /* file complete callback */
                        tick	      /* tick callback */
@@ -230,21 +213,6 @@ static size_t zmodem_send(int file_count,
     }
     sz->zm->baudrate = io_mode(sz->io_mode_fd,1);
 
-    /* Spec 8.1: "The sending program may send the string "rz\r" to
-       invoke the receiving program from a possible command
-       mode." */
-    display("rz\r");
-    fflush(stdout);
-
-    /* Spec 8.1: "The sending program may then display a message
-     * intended for human consumption."  That would happen here,
-     * if we did it.  */
-
-    /* throw away any input already received. This doesn't harm
-     * as we invite the receiver to send it's data again, and
-     * might be useful if the receiver has already died or
-     * if there is dirt left if the line
-     */
     struct timeval t;
     unsigned char throwaway;
     fd_set f;
@@ -257,11 +225,6 @@ static size_t zmodem_send(int file_count,
     FD_ZERO(&f);
     FD_SET(sz->io_mode_fd,&f);
 
-    while (select(1,&f,NULL,NULL,&t)) {
-        if (0==read(sz->io_mode_fd,&throwaway,1)) /* EOF ... */
-            break;
-    }
-
     zreadline_flushline(sz->zm->zr);
 
     /* Spec 8.1: "Then the sender may send a ZRQINIT. The ZRQINIT
@@ -270,12 +233,6 @@ static size_t zmodem_send(int file_count,
     zm_set_header_payload(sz->zm, 0L);
     zm_send_hex_header(sz->zm, ZRQINIT);
     sz->zrqinits_sent++;
-    if (sz->tcp_flag==1) {
-        sz->totalleft+=256; /* tcp never needs more */
-        sz->filesleft++;
-    }
-    fflush(stdout);
-
     /* This is the main loop.  */
     if (sz_transmit_files(sz, file_count, file_list)==ERROR) {
         sz->exitcode=0200;
@@ -291,9 +248,9 @@ static size_t zmodem_send(int file_count,
     else
         dm=0;
     if (dm)
-        log_info(_("Transfer incomplete"));
+        log_info("Transfer incomplete");
     else
-        log_info(_("Transfer complete"));
+        log_info("Transfer complete");
     exit(dm);
     /*NOTREACHED*/
 
@@ -317,7 +274,7 @@ static int sz_send_pseudo(sz_t *sz, const char *name, const char *data)
         p = "/tmp";
     tmp=malloc(PATH_MAX+1);
     if (!tmp) {
-        log_fatal(_("out of memory"));
+        log_fatal("out of memory");
         exit(1);
     }
 
@@ -383,23 +340,6 @@ static int sz_transmit_files (sz_t *sz, int argc, char *argp[])
     sz->firstsec = TRUE;
     sz->bytcnt = (size_t) -1;
 
-    if (sz->tcp_flag==1) {
-        char buf[256];
-        int d;
-
-        /* tell receiver to receive via tcp */
-        d=tcp_server(buf);
-        if (sz_send_pseudo(sz, "/$tcp$.t",buf)) {
-            log_fatal(_("tcp protocol init failed"));
-            exit(1);
-        }
-        /* ok, now that this file is sent we can switch to tcp */
-
-        sz->tcp_socket=tcp_accept(d);
-        dup2(sz->tcp_socket,0);
-        dup2(sz->tcp_socket,1);
-    }
-
     /* Begin the main loop. */
     for (n = 0; n < argc; ++n) {
         sz->totsecs = 0;
@@ -453,7 +393,7 @@ static int sz_transmit_file(sz_t *sz, const char *oname, const char *remotename)
      #endif
              ) {
             zreadline_canit(sz->zm->zr, STDOUT_FILENO);
-            log_fatal(_("security violation: not allowed to upload from %s"),oname);
+            log_fatal("security violation: not allowed to upload from %s",oname);
             exit(1);
         }
     }
@@ -473,7 +413,7 @@ static int sz_transmit_file(sz_t *sz, const char *oname, const char *remotename)
 
     } else if ((sz->input_f=fopen(oname, "r"))==NULL) {
         int e=errno;
-        log_error(_("cannot open %s: %s"), oname, strerror(e));
+        log_error("cannot open %s: %s", oname, strerror(e));
         ++sz->errcnt;
         return OK;	/* pass over it, there may be others */
     } else {
@@ -482,7 +422,7 @@ static int sz_transmit_file(sz_t *sz, const char *oname, const char *remotename)
     /* Check for directory or block special files */
     fstat(fileno(sz->input_f), &f);
     if (S_ISDIR(f.st_mode) || S_ISBLK(f.st_mode)) {
-        log_error(_("is not a file: %s"), name);
+        log_error("is not a file: %s", name);
         fclose(sz->input_f);
         return OK;
     }
@@ -516,7 +456,7 @@ static int sz_transmit_file(sz_t *sz, const char *oname, const char *remotename)
     case ERROR:
         return ERROR;
     case ZSKIP:
-        log_error(_("skipped: %s"), name);
+        log_error("skipped: %s", name);
         return OK;
     }
     if (!sz->zm->zmodem_requested && sz_transmit_file_contents(sz, &zi)==ERROR)
@@ -589,7 +529,7 @@ static int sz_transmit_pathname(sz_t *sz, struct zm_fileinfo *zi)
                     sz->filesleft, sz->totalleft);
         }
     }
-    log_info(_("Sending: %s"),sz->txbuf);
+    log_info("Sending: %s",sz->txbuf);
     sz->totalleft -= f.st_size;
     if (--sz->filesleft <= 0)
         sz->totalleft = 0;
@@ -641,7 +581,7 @@ static int sz_getnak(sz_t *sz)
         case TIMEOUT:
             /* 30 seconds are enough */
             if (tries==3) {
-                log_error(_("Timeout on pathname"));
+                log_error( "Timeout on pathname");
                 return TRUE;
             }
             /* don't send a second ZRQINIT _directly_ after the
@@ -697,7 +637,7 @@ static int sz_transmit_file_contents(sz_t *sz, struct zm_fileinfo *zi)
            && firstch != WANTG && firstch!=TIMEOUT && firstch!=CAN)
         ;
     if (firstch==CAN) {
-        log_error(_("Receiver Cancelled"));
+        log_error( "Receiver Cancelled");
         return ERROR;
     }
     if (firstch==WANTCRC)
@@ -723,7 +663,7 @@ static int sz_transmit_file_contents(sz_t *sz, struct zm_fileinfo *zi)
         ++attempts;
     } while ((firstch=(zreadline_getc(sz->zm->zr, sz->zm->rxtimeout)) != ACK) && attempts < RETRYMAX);
     if (attempts == RETRYMAX) {
-        log_error(_("No ACK on EOT"));
+        log_error( "No ACK on EOT");
         return ERROR;
     }
     else
@@ -771,24 +711,24 @@ gotnak:
         case CAN:
             if(sz->lastrx == CAN) {
 cancan:
-                log_error(_("Cancelled"));  return ERROR;
+                log_error( "Cancelled");  return ERROR;
             }
             break;
         case TIMEOUT:
-            log_error(_("Timeout on sector ACK")); continue;
+            log_error( "Timeout on sector ACK"); continue;
         case WANTCRC:
             if (sz->firstsec)
                 sz->crcflg = TRUE;
         case NAK:
-            log_error(_("NAK on sector")); continue;
+            log_error( "NAK on sector"); continue;
         case ACK:
             sz->firstsec=FALSE;
             sz->totsecs += (cseclen>>7);
             return OK;
         case ERROR:
-            log_error(_("Got burst for sector ACK")); break;
+            log_error( "Got burst for sector ACK"); break;
         default:
-            log_error(_("Got %02x for sector ACK"), firstch); break;
+            log_error( "Got %02x for sector ACK", firstch); break;
         }
         for (;;) {
             sz->lastrx = firstch;
@@ -800,7 +740,7 @@ cancan:
                 goto cancan;
         }
     }
-    log_error(_("Retry Count Exceeded"));
+    log_error( "Retry Count Exceeded");
     return ERROR;
 }
 
@@ -946,7 +886,6 @@ static int sz_getzrxinit(sz_t *sz)
             if (sz->blkopt && sz->blklen > sz->blkopt)
                 sz->blklen = sz->blkopt;
             log_debug("Rxbuflen=%d blklen=%d", sz->rxbuflen, sz->blklen);
-            log_debug("Txwindow = %u Txwspac = %d", sz->txwindow, sz->txwspac);
             sz->zm->rxtimeout = old_timeout;
             return (sz_sendzsinit(sz));
         case ZCAN:
@@ -1032,10 +971,10 @@ again:
         default:
             continue;
         case ZRQINIT:  /* remote site is sender! */
-            log_info(_("got ZRQINIT"));
+            log_info("got ZRQINIT");
             return ERROR;
         case ZCAN:
-            log_info(_("got ZCAN"));
+            log_info("got ZCAN");
             return ERROR;
         case TIMEOUT:
             return ERROR;
@@ -1238,7 +1177,7 @@ gotack:
         sz->blklen = sz_calculate_block_length (sz, total_sent);
         total_sent += sz->blklen + OVERHEAD;
         if (sz->blklen != old)
-            log_trace (_("blklen now %d\n"), sz->blklen);
+            log_trace ("blklen now %d\n", sz->blklen);
         if (sz->mm_addr) {
             if (zi->bytes_sent + sz->blklen < sz->mm_size)
                 n = sz->blklen;
@@ -1301,7 +1240,7 @@ gotack:
                     if (last_bps<sz->min_bps) {
                         if (now-low_bps>=sz->min_bps_time) {
                             /* too bad */
-                            log_info(_("sz_transmit_file_contents_by_zmodem: bps rate %ld below min %ld"),
+                            log_info("sz_transmit_file_contents_by_zmodem: bps rate %ld below min %ld",
                                      last_bps, sz->min_bps);
                             return ERROR;
                         }
@@ -1313,18 +1252,18 @@ gotack:
             }
             if (sz->stop_time && now>=sz->stop_time) {
                 /* too bad */
-                log_info(_("sz_transmit_file_contents_by_zmodem: reached stop time"));
+                log_info("sz_transmit_file_contents_by_zmodem: reached stop time");
                 return ERROR;
             }
 
-            log_debug (_("Bytes Sent:%7ld/%7ld   BPS:%-8ld ETA %02d:%02d  "),
+            log_debug ("Bytes Sent:%7ld/%7ld   BPS:%-8ld ETA %02d:%02d  ",
                        (long) zi->bytes_sent, (long) zi->bytes_total,
                        last_bps, minleft, secleft);
             if (sz->tick_cb) {
                 bool more = sz->tick_cb((long) zi->bytes_sent, (long) zi->bytes_total,
                                         last_bps, minleft, secleft);
                 if (!more) {
-                    log_info(_("sz_transmit_file_contents_by_zmodem: tick callback returns FALSE"));
+                    log_info("sz_transmit_file_contents_by_zmodem: tick callback returns FALSE");
                     return ERROR;
                 }
             }
@@ -1458,7 +1397,7 @@ static int sz_calculate_block_length(sz_t *sz, long total_sent)
                 last_blklen = 32;
             else if (last_blklen > 512)
                 last_blklen=512;
-            log_trace(_("sz_calculate_block_length: reduced to %d due to error\n"),
+            log_trace("sz_calculate_block_length: reduced to %d due to error\n",
                       last_blklen);
         }
         last_error_count=sz->error_count;
@@ -1489,16 +1428,16 @@ static int sz_calculate_block_length(sz_t *sz, long total_sent)
         d=this_bytes_per_error-last_bytes_per_error;
     if (d<4)
     {
-        log_trace(_("sz_calculate_block_length: returned old value %d due to low bpe diff\n"),
+        log_trace("sz_calculate_block_length: returned old value %d due to low bpe diff\n",
                   last_blklen);
-        log_trace(_("sz_calculate_block_length: old %ld, new %ld, d %ld\n"),
+        log_trace("sz_calculate_block_length: old %ld, new %ld, d %ld\n",
                   last_bytes_per_error,this_bytes_per_error,d );
         return last_blklen;
     }
     last_bytes_per_error=this_bytes_per_error;
 
 calcit:
-    log_trace(_("sz_calculate_block_length: calc total_bytes=%ld, bpe=%ld, ec=%ld\n"),
+    log_trace("sz_calculate_block_length: calc total_bytes=%ld, bpe=%ld, ec=%ld\n",
               total_bytes,this_bytes_per_error,(long) sz->error_count);
     for (i=32;i<=sz->max_blklen;i*=2) {
         long ok; /* some many ok blocks do we need */
@@ -1508,7 +1447,7 @@ calcit:
         failed=((long) i + OVERHEAD) * ok / this_bytes_per_error;
         transmitted=total_bytes + ok * OVERHEAD
                 + failed * ((long) i+OVERHEAD+OVER_ERR);
-        log_trace(_("sz_calculate_block_length: blklen %d, ok %ld, failed %ld -> %lu\n"),
+        log_trace("sz_calculate_block_length: blklen %d, ok %ld, failed %ld -> %lu\n",
                   i,ok,failed,transmitted);
         if (transmitted < best_bytes || !best_bytes)
         {
@@ -1519,7 +1458,7 @@ calcit:
     if (best_size > 2*last_blklen)
         best_size=2*last_blklen;
     last_blklen=best_size;
-    log_trace(_("sz_calculate_block_length: returned %d as best\n"),
+    log_trace("sz_calculate_block_length: returned %d as best\n",
               last_blklen);
     return last_blklen;
 }

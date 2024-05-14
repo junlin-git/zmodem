@@ -44,7 +44,7 @@ zreadline_t *zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeo
 	zr->readline_readnum = readnum;
 	zr->readline_buffer = malloc(bufsize > readnum ? bufsize : readnum);
 	if (!zr->readline_buffer) {
-		log_fatal(_("out of memory"));
+        log_fatal("out of memory");
 		exit(1);
 	}
 	zr->no_timeout = no_timeout;
@@ -63,7 +63,7 @@ int zreadline_getc(zreadline_t *zr, int timeout)
 		return readline_internal(zr, timeout);
 }
 
-static void zreadline_alarm_handler(int dummy LRZSZ_ATTRIB_UNUSED)
+static void zreadline_alarm_handler(int dummy )
 {
 	/* doesn't need to do anything */
 }
@@ -84,7 +84,7 @@ static int readline_internal(zreadline_t *zr, unsigned int timeout)
 			n = 3;
 		else if (n==0)
 			n=1;
-		log_trace("Calling read: alarm=%d  Readnum=%d ",
+        log_trace("Calling read: alarm=%d  Readnum=%d",
 			 n, zr->readline_readnum);
 		signal(SIGALRM, zreadline_alarm_handler);
 		alarm(n);

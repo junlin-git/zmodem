@@ -33,7 +33,6 @@
  */
 
 #include "zglobal.h"
-#include "log.h"
 #include "crctab.h"
 #include "zm.h"
 
@@ -75,7 +74,7 @@ static const char *frametypes[] = {
     /*  not including psuedo negative entries */
 };
 
-#define badcrc _("Bad CRC")
+#define badcrc "Bad CRC"
 /* static char *badcrc = "Bad CRC"; */
 static int zm_get_ascii_char (zm_t *zm);
 static int zm_get_escaped_char (zm_t *zm);
@@ -106,6 +105,30 @@ zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     zm->zrwindow = zrwindow;
     zm_escape_sequence_init(zm);
     return zm;
+}
+
+
+double timing (int reset, time_t *nowp)
+{
+    static double elaptime, starttime, stoptime;
+    double yet;
+    struct timeval tv;
+    struct timezone tz;
+    tz.tz_dsttime = 0;
+    gettimeofday (&tv, &tz);
+    yet=tv.tv_sec + tv.tv_usec/1000000.0;
+
+    if (nowp)
+        *nowp=(time_t) yet;
+    if (reset) {
+        starttime = yet;
+        return starttime;
+    }
+    else {
+        stoptime = yet;
+        elaptime = stoptime - starttime;
+        return elaptime;
+    }
 }
 
 int zm_get_zctlesc(zm_t *zm)
@@ -614,20 +637,20 @@ crcfoo:
                 return d;
             }
             case GOTCAN:
-                log_error(_("Sender Canceled"));
+                log_error("Sender Canceled");
                 return ZCAN;
             case TIMEOUT:
-                log_error(_("TIMEOUT"));
+                log_error("TIMEOUT");
                 return c;
             default:
-                log_error(_("Bad data subpacket"));
+                log_error("Bad data subpacket");
                 return c;
             }
         }
         buf[i] = c;
         crc = updcrc(c, crc);
     }
-    log_error(_("Data subpacket too long"));
+    log_error("Data subpacket too long");
     return ERROR;
 }
 
@@ -671,20 +694,20 @@ crcfoo:
                           Zendnames[(d-GOTCRCE)&3]);
                 return d;
             case GOTCAN:
-                log_error(_("Sender Canceled"));
+                log_error("Sender Canceled");
                 return ZCAN;
             case TIMEOUT:
-                log_error(_("TIMEOUT"));
+                log_error("TIMEOUT");
                 return c;
             default:
-                log_error(_("Bad data subpacket"));
+                log_error("Bad data subpacket");
                 return c;
             }
         }
         buf[i] = c;
         crc = UPDC32(c, crc);
     }
-    log_error(_("Data subpacket too long"));
+    log_error("Data subpacket too long");
     return ERROR;
 }
 
@@ -751,7 +774,7 @@ gotcan:
     default:
 agn2:
         if (intro_msg_len > max_intro_msg_len) {
-            log_error(_("Intro message length exceeded"));
+            log_error("Intro message length exceeded");
             return(ERROR);
         }
         if (zm->eflag == 1 && isprint(c))
@@ -829,7 +852,7 @@ fifi:
     case ERROR:
     case TIMEOUT:
     case RCDO:
-        log_error(_("Got %s"), frametypes[c+FTOFFSET]);
+        log_error("Got %s", frametypes[c+FTOFFSET]);
         /* **** FALL THRU TO **** */
     default:
         if (c >= -3 && c <= FRTYPES)
@@ -1153,7 +1176,7 @@ int zm_do_crc_check(zm_t *zm, FILE *f, size_t remote_bytes, size_t check_bytes)
             case ZRINIT:
                 return ERROR;
             case ZCAN:
-                log_info(_("got ZCAN"));
+                log_info("got ZCAN");
                 return ERROR;
                 break;
             case ZCRC:

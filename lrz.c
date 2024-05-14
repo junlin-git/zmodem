@@ -35,10 +35,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-
 #include "zglobal.h"
-#include "timing.h"
-#include "log.h"
 #include "crctab.h"
 #include "zm.h"
 
@@ -212,7 +209,7 @@ static void bibi(int n)
     // 	write_modem_escaped_string_to_stdout(Attn);
     // canit(zr, STDOUT_FILENO);
     io_mode(0,0);
-    log_fatal(_("caught signal %s; exiting"), n);
+    log_fatal("caught signal %s; exiting", n);
     exit(128+n);
 }
 
@@ -226,7 +223,6 @@ static size_t zmodem_receive(const char *directory,
                       void (*complete_cb)(const char *filename, int result, size_t size, time_t date)
                       )
 {
-    log_set_level(LOG_ERROR);
     rz_t *rz = rz_init(0, /* fd */
                        8192, /* readnum */
                        16384, /* bufsize */
@@ -265,9 +261,9 @@ static size_t zmodem_receive(const char *directory,
     if (exitcode && !rz->zm->zmodem_requested)
         zreadline_canit(rz->zm->zr, STDOUT_FILENO);
     if (exitcode)
-        log_info(_("Transfer incomplete"));
+        log_info("Transfer incomplete");
     else
-        log_info(_("Transfer complete"));
+        log_info("Transfer complete");
     exit(exitcode);
 
     return 0u;
@@ -287,7 +283,6 @@ static int rz_receive(rz_t *rz)
     zi.bytes_skipped=0;
     zi.eof_seen=0;
 
-    log_info(_("%s waiting to receive."), program_name);
     c = 0;
     c = rz_zmodem_session_startup(rz);
     if (c != 0) {
@@ -318,8 +313,7 @@ static int rz_receive(rz_t *rz)
                 d=0.5; /* can happen if timing uses time() */
             bps=(zi.bytes_received-zi.bytes_skipped)/d;
 
-            log_info(
-                        _("\rBytes received: %7ld/%7ld   BPS:%-6ld"),
+            log_info("\rBytes received: %7ld/%7ld   BPS:%-6ld",
                         (long) zi.bytes_received, (long) zi.bytes_total, bps);
         }
     }
@@ -334,7 +328,7 @@ fubar:
 
     if (rz->restricted && rz->pathname) {
         unlink(rz->pathname);
-        log_info(_("%s: %s removed."), program_name, rz->pathname);
+
     }
     return ERROR;
 }
@@ -359,7 +353,7 @@ et_tu:
     zreadline_flushline(rz->zm->zr); /* Do read next time ... */
     while ((c = rz_receive_sector(rz, &Blklen, rpn, 100)) != 0) {
         if (c == WCEOT) {
-            log_error( _("Pathname fetch returned EOT"));
+            log_error( "Pathname fetch returned EOT");
             putchar(ACK);
             fflush(stdout);
             zreadline_flushline(rz->zm->zr);	/* Do read next time ... */
@@ -404,7 +398,7 @@ static int rz_receive_sectors(rz_t *rz, struct zm_fileinfo *zi)
             sendchar=ACK;
         }
         else if (sectcurr==(sectnum&0377)) {
-            log_error( _("Received dup Sector"));
+            log_error("Received dup Sector");
             sendchar=ACK;
         }
         else if (sectcurr==WCEOT) {
@@ -418,7 +412,7 @@ static int rz_receive_sectors(rz_t *rz, struct zm_fileinfo *zi)
         else if (sectcurr==ERROR)
             return ERROR;
         else {
-            log_error( _("Sync Error"));
+            log_error("Sync Error");
             return ERROR;
         }
     }
@@ -465,21 +459,21 @@ get2:
                     goto bilge;
                 oldcrc=updcrc(firstch, oldcrc);
                 if (oldcrc & 0xFFFF)
-                    log_error( _("CRC"));
+                    log_error("CRC");
                 else {
                     rz->firstsec=FALSE;
                     return sectcurr;
                 }
             }
             else
-                log_error(_("Sector number garbled"));
+                log_error("Sector number garbled");
         }
         /* make sure eot really is eot and not just mixmash */
         else if (firstch==EOT && zreadline_getc(rz->zm->zr,1)==TIMEOUT)
             return WCEOT;
         else if (firstch==CAN) {
             if (rz->lastrx==CAN) {
-                log_error( _("Sender Cancelled"));
+                log_error("Sender Cancelled");
                 return ERROR;
             } else {
                 rz->lastrx=CAN;
@@ -490,10 +484,10 @@ get2:
             if (rz->firstsec)
                 goto humbug;
 bilge:
-            log_error( _("TIMEOUT"));
+            log_error("TIMEOUT");
         }
         else
-            log_error( _("Got 0%o sector header"), firstch);
+            log_error("Got 0%o sector header", firstch);
 
 humbug:
         rz->lastrx=0;
@@ -537,7 +531,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
             p++;
             if (!*p) {
                 /* alert - file name ended in with a / */
-                log_info(_("file name ends with a /, skipped: %s"),name);
+                log_info("file name ends with a /, skipped: %s",name);
                 return ERROR;
             }
             name=p;
@@ -545,7 +539,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
     }
     name_static=malloc(strlen(name)+1);
     if (!name_static) {
-        log_fatal(_("out of memory"));
+        log_fatal("out of memory");
         exit(1);
     }
     strcpy(name_static,name);
@@ -607,7 +601,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
         int i;
         if (rz->zmanag == ZF1_ZMNEW || rz->zmanag==ZF1_ZMNEWL) {
             if (-1==fstat(fileno(rz->fout),&sta)) {
-                log_info(_("file exists, skipped: %s"),name);
+                log_info("file exists, skipped: %s",name);
                 return ERROR;
             }
             if (rz->zmanag == ZF1_ZMNEW) {
@@ -636,7 +630,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
             size_t namelen;
             fclose(rz->fout);
             if ((rz->zmanag & ZF1_ZMMASK)!=ZF1_ZMCHNG) {
-                log_info(_("file exists, skipped: %s"),name);
+                log_info("file exists, skipped: %s",name);
                 return ERROR;
             }
             /* try to rename */
@@ -656,7 +650,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
             free(name_static);
             name_static=malloc(strlen(tmpname)+1);
             if (!name_static) {
-                log_fatal(_("out of memory"));
+                log_fatal("out of memory");
                 exit(1);
             }
             strcpy(name_static,tmpname);
@@ -677,7 +671,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
     if (rz->in_tcpsync) {
         rz->fout=tmpfile();
         if (!rz->fout) {
-            log_fatal(_("cannot tmpfile() for tcp protocol synchronization: %s"), strerror(errno));
+            log_fatal("cannot tmpfile() for tcp protocol synchronization: %s", strerror(errno));
             exit(1);
         }
         zi->bytes_received=0;
@@ -700,13 +694,11 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
             free(rz->pathname);
         rz->pathname=malloc((PATH_MAX)*2);
         if (!rz->pathname) {
-            log_fatal(_("out of memory"));
+            log_fatal("out of memory");
             exit(1);
         }
-        sprintf(rz->pathname, "%s %s", program_name+2, name_static);
-        log_info("%s: %s %s",
-                 _("Topipe"),
-                 rz->pathname, rz->thisbinary?"BIN":"ASCII");
+
+        log_info("%s: %s ",rz->pathname, rz->thisbinary?"BIN":"ASCII");
         if ((rz->fout=popen(rz->pathname, "w")) == NULL)
             return ERROR;
     } else {
@@ -714,12 +706,12 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
             free(rz->pathname);
         rz->pathname=malloc((PATH_MAX)*2);
         if (!rz->pathname) {
-            log_fatal(_("out of memory"));
+            log_fatal("out of memory");
             exit(1);
         }
         strcpy(rz->pathname, name_static);
         /* overwrite the "waiting to receive" line */
-        log_info(_("Receiving: %s"), name_static);
+        log_info("Receiving: %s", name_static);
         rz_checkpath(rz, name_static);
         if (rz->nflag)
         {
@@ -727,7 +719,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
             name_static=(char *) strdup("/dev/null");
             if (!name_static)
             {
-                log_fatal(_("out of memory"));
+                log_fatal("out of memory");
                 exit(1);
             }
         }
@@ -769,7 +761,7 @@ static int rz_process_header(rz_t *rz, char *name, struct zm_fileinfo *zi)
         rz->fout = fopen(name_static, openmode);
         if ( !rz->fout)
         {
-            log_error(_("cannot open %s: %s"), name_static, strerror(errno));
+            log_error("cannot open %s: %s", name_static, strerror(errno));
             return ERROR;
         }
     }
@@ -861,8 +853,6 @@ static void rz_checkpath(rz_t *rz, const char *name)
          * don't overwrite hidden files in restricted mode */
         if ((rz->restricted==2 || *name=='.') && fopen(name, "r") != NULL) {
             zreadline_canit(rz->zm->zr, STDOUT_FILENO);
-            log_info(_("%s: %s exists"),
-                     program_name, name);
             bibi(-1);
         }
         /* restrict pathnames to current tree or uucppublic */
@@ -873,13 +863,11 @@ static void rz_checkpath(rz_t *rz, const char *name)
      #endif
              ) {
             zreadline_canit(rz->zm->zr, STDOUT_FILENO);
-            log_info(_("%s: Security Violation"),program_name);
             bibi(-1);
         }
         if (rz->restricted > 1) {
             if (name[0]=='.' || strstr(name,"/.")) {
                 zreadline_canit(rz->zm->zr, STDOUT_FILENO);
-                log_info(_("%s: Security Violation"),program_name);
                 bibi(-1);
             }
         }
@@ -1022,10 +1010,10 @@ again:
                receiving program receives a ZRINIT header,
                it is an echo indicating that the sending
                program is not operational."  */
-            log_info(_("got ZRINIT"));
+            log_info("got ZRINIT");
             return ERROR;
         case ZCAN:
-            log_info(_("got ZCAN"));
+            log_info("got ZCAN");
             return ERROR;
         }
     }
@@ -1052,14 +1040,14 @@ static int rz_receive_files(rz_t *rz, struct zm_fileinfo *zi)
             if (d==0)
                 d=0.5; /* can happen if timing uses time() */
             bps=(zi->bytes_received-zi->bytes_skipped)/d;
-            log_info(_("Bytes received: %7ld/%7ld   BPS:%-6ld"),
+            log_info("Bytes received: %7ld/%7ld   BPS:%-6ld",
                      (long) zi->bytes_received, (long) zi->bytes_total, bps);
         }
             /* FALL THROUGH */
         case ZSKIP:
             if (c==ZSKIP)
             {
-                log_info(_("Skipped"));
+                log_info("Skipped");
             }
             switch (rz_zmodem_session_startup(rz)) {
             case ZCOMPL:
@@ -1256,7 +1244,7 @@ moredata:
                     return ERROR;
                 }
 
-                log_info(_("\rBytes received: %7ld/%7ld   BPS:%-6ld ETA %02d:%02d  "),
+                log_info("\rBytes received: %7ld/%7ld   BPS:%-6ld ETA %02d:%02d  ",
                          (long) zi->bytes_received, (long) zi->bytes_total,
                          last_bps, minleft, secleft);
                 if (rz->tick_cb)
@@ -1358,7 +1346,7 @@ static int rz_closeit(rz_t *rz, struct zm_fileinfo *zi)
     if (rz->in_tcpsync) {
         rewind(rz->fout);
         if (!fgets(rz->tcp_buf, sizeof(rz->tcp_buf), rz->fout)) {
-            log_fatal(_("fgets for tcp protocol synchronization failed: %s"), strerror(errno));
+            log_fatal("fgets for tcp protocol synchronization failed: %s", strerror(errno));
             exit(1);
         }
         fclose(rz->fout);
@@ -1366,7 +1354,7 @@ static int rz_closeit(rz_t *rz, struct zm_fileinfo *zi)
     }
     ret=fclose(rz->fout);
     if (ret) {
-        log_error(_("file close error: %s"), strerror(errno));
+        log_error("file close error: %s", strerror(errno));
         /* this may be any sort of error, including random data corruption */
 
         unlink(rz->pathname);
