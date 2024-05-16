@@ -1,7 +1,7 @@
 #include "uart.h"
 #include "zglobal.h"
-static uint32_t g_speed[] = {B921600, B115200, B38400, B19200, B9600, B4800, B2400, B1200, B300, };
-static UARTHAL_BIT_RATE g_name[]  = {HAL_UART_BITRATE_921600, HAL_UART_BITRATE_115200, HAL_UART_BITRATE_38400,
+static uint32_t g_speed[] = {B1500000,B1000000,B921600, B115200, B38400, B19200, B9600, B4800, B2400, B1200, B300, };
+static UARTHAL_BIT_RATE g_name[]  = {HAL_UART_BITRATE_1500000,HAL_UART_BITRATE_1000000,HAL_UART_BITRATE_921600, HAL_UART_BITRATE_115200, HAL_UART_BITRATE_38400,
                                     HAL_UART_BITRATE_19200, HAL_UART_BITRATE_9600,
                                     HAL_UART_BITRATE_4800, HAL_UART_BITRATE_2400, HAL_UART_BITRATE_1200, HAL_UART_BITRATE_300, };
 
@@ -215,7 +215,8 @@ uint32_t init_uart(int *fd,char *device)
     int ret=uart_open_dev(fd,device,HAL_UART_BITRATE_921600);
     if(ret!=OK)
     {
-        log_fatal("init /dev/ttyUSB1 ERROR");
+        log_fatal("init %s ERROR",*device);
+        exit(0);
         return -1;
     }
     return *fd;
