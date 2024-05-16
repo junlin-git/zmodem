@@ -14,9 +14,8 @@ typedef struct zreadline_ {
 
 zreadline_t *zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeout);
 void zreadline_flush (zreadline_t *zr);
-void zreadline_flushline (zreadline_t *zr);
 int zreadline_getc(zreadline_t *zr, int timeout);
-void zreadline_canit (zreadline_t *zr, int fd);
-
-
+void zreadline_write(char c);
+void zreadline_canit (zreadline_t *zr);
+void HI_LOG_Print(char *info,const char *pszFunc,int u32Line,char *pszFmt, ...);
 #endif

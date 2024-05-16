@@ -92,7 +92,7 @@ static void zm_put_escaped_string(zm_t *zm, const char *str, size_t len);
 
 /* Return a newly allocated state machine for zm primitives. */
 zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
-        int rxtimeout, int znulls, int eflag, int baudrate, int zctlesc, int zrwindow)
+        int rxtimeout, int znulls, int eflag, int zctlesc, int zrwindow)
 {
     zm_t *zm = (zm_t *) malloc (sizeof (zm_t));
     memset(zm, 0, sizeof(zm_t));
@@ -100,7 +100,6 @@ zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     zm->rxtimeout = rxtimeout;
     zm->znulls = znulls;
     zm->eflag = eflag;
-    zm->baudrate = baudrate;
     zm->zctlesc = zctlesc;
     zm->zrwindow = zrwindow;
     zm_escape_sequence_init(zm);
@@ -191,7 +190,7 @@ static int zm_get_hex_encoded_byte(zm_t *zm)
     if (c & ~0xF)
         return ERROR;
     c += (n<<4);
-    log_trace("zm_get_hex_encoded_byte: %02X", c);
+    //log_trace("zm_get_hex_encoded_byte: %02X", c);
     return c;
 }
 
@@ -286,7 +285,7 @@ again2:
             return (c ^ 0b01000000);
         break;
     }
-    log_debug(_("Bad escape sequence %x"), c);
+    log_debug("Bad escape sequence %x", c);
     return ERROR;
 }
 
@@ -302,28 +301,28 @@ void zm_put_escaped_char(zm_t *zm, int c)
     switch(zm->escape_sequence_table[(unsigned) (c&=0xFF)])
     {
     case ZM_ESCAPE_NEVER:
-        putchar(zm->lastsent = c);
+        zreadline_write(zm->lastsent = c);
         break;
     case ZM_ESCAPE_ALWAYS:
-        putchar(ZDLE);
+        zreadline_write(ZDLE);
         /* Spec 7.2: The receiving program decodes any sequence
          * of ZDLE followed by a byte with bit 6 set and bit 5 reset
          * (uppercase letter, either parity) to the equivalent control
          * character by inverting bit 6 */
         c ^= 0100;
-        putchar(zm->lastsent = c);
+        zreadline_write(zm->lastsent = c);
         break;
     case ZM_ESCAPE_AFTER_AMPERSAND:
         if ((zm->lastsent & 0x7F) != '@') {
-            putchar(zm->lastsent = c);
+            zreadline_write(zm->lastsent = c);
         } else {
-            putchar(ZDLE);
+            zreadline_write(ZDLE);
             /* Spec 7.2: The receiving program decodes any sequence
          * of ZDLE followed by a byte with bit 6 set and bit 5 reset
          * (uppercase letter, either parity) to the equivalent control
          * character by inverting bit 6 */
             c ^= 0100;
-            putchar(zm->lastsent = c);
+            zreadline_write(zm->lastsent = c);
         }
         break;
     }
@@ -350,20 +349,20 @@ static void zm_put_escaped_string (zm_t *zm, const char *s, size_t count)
             int c=*s;
             switch(last_esc) {
             case 0:
-                putchar(zm->lastsent = c);
+                zreadline_write(zm->lastsent = c);
                 break;
             case 1:
-                putchar(ZDLE);
+                zreadline_write(ZDLE);
                 c ^= 0100;
-                putchar(zm->lastsent = c);
+                zreadline_write(zm->lastsent = c);
                 break;
             case 2:
                 if ((zm->lastsent & 0x7F) != '@') {
-                    putchar(zm->lastsent = c);
+                    zreadline_write(zm->lastsent = c);
                 } else {
-                    putchar(ZDLE);
+                    zreadline_write(ZDLE);
                     c ^= 0100;
-                    putchar(zm->lastsent = c);
+                    zreadline_write(zm->lastsent = c);
                 }
                 break;
             }
@@ -381,10 +380,10 @@ void zm_send_binary_header(zm_t *zm, int type)
     log_trace("zm_send_binary_header: %s %lx", frametypes[type+FTOFFSET], zm_reclaim_send_header(zm));
     if (type == ZDATA)
         for (int n = 0; n < zm->znulls; n ++)
-            putchar(0);
+            zreadline_write(0);
 
-    putchar(ZPAD);
-    putchar(ZDLE);
+    zreadline_write(ZPAD);
+    zreadline_write(ZDLE);
 
     zm->crc32t = zm->txfcs32;
     if (zm->crc32t)
@@ -392,7 +391,7 @@ void zm_send_binary_header(zm_t *zm, int type)
     else {
         /* Spec 7.3.1. A binary header begins with the sequence
            ZPAD, ZDLE, ZBIN. */
-        putchar(ZBIN);
+        zreadline_write(ZBIN);
         /* .. The frame type byte is ZDLE encoded. */
         zm_put_escaped_char(zm, type);
         crc = updcrc(type, 0);
@@ -408,8 +407,7 @@ void zm_send_binary_header(zm_t *zm, int type)
         zm_put_escaped_char(zm, crc>>8);
         zm_put_escaped_char(zm, crc);
     }
-    if (type != ZDATA)
-        fflush(stdout);
+
 }
 
 
@@ -421,7 +419,7 @@ static void zm_send_binary_header32(zm_t *zm, int type)
     /* Spec 7.3.2. A "32 bit CRC" binary header is similar to
       * a binary header, except the ZBIN character is replaced by a ZBIN32
       * character. */
-    putchar(ZBIN32);
+    zreadline_write(ZBIN32);
 
     /* Put the type. */
     zm_put_escaped_char(zm, type);
@@ -450,7 +448,7 @@ void zm_send_hex_header(zm_t *zm, int type)
     char s[30];
     size_t len;
 
-    log_trace("zm_send_hex_header: %s %lx", frametypes[(type & 0x7f)+FTOFFSET], zm_reclaim_send_header(zm));
+    //log_trace("zm_send_hex_header: %s %lx", frametypes[(type & 0x7f)+FTOFFSET], zm_reclaim_send_header(zm));
 
     /* Spec 7.3.3.  A hex header begins with the sequence ZPAD, ZPAD,
          * ZDLE, ZHEX. */
@@ -491,8 +489,7 @@ void zm_send_hex_header(zm_t *zm, int type)
     {
         s[len++]=021;
     }
-    fflush(stdout);
-    write(1,s,len);
+    write(zm->zr->readline_fd,s,len);
 }
 
 /*
@@ -510,16 +507,15 @@ void zm_send_data(zm_t *zm, const char *buf, size_t length, int frameend)
         zm_put_escaped_char(zm, buf[i]);
         crc = updcrc((0xFF & buf[i]), crc);
     }
-    putchar(ZDLE);
-    putchar(frameend);
+    zreadline_write(ZDLE);
+    zreadline_write(frameend);
     crc = updcrc(frameend, crc);
 
     crc = updcrc(0,updcrc(0,crc));
     zm_put_escaped_char(zm, crc>>8);
     zm_put_escaped_char(zm, crc);
     if (frameend == ZCRCW) {
-        putchar(XON);
-        fflush(stdout);
+        zreadline_write(XON);
     }
 }
 
@@ -535,62 +531,23 @@ void zm_send_data32(zm_t *zm, const char *buf, size_t length, int frameend)
         c = buf[i] & 0xFF;
         crc = UPDC32(c, crc);
     }
-    putchar(ZDLE);
-    putchar(frameend);
+    zreadline_write(ZDLE);
+    zreadline_write(frameend);
     crc = UPDC32(frameend, crc);
 
     crc = ~crc;
     for (int i = 0; i < 4; i ++) {
         c=(int) crc;
         if (c & 0140)
-            putchar(zm->lastsent = c);
+            zreadline_write(zm->lastsent = c);
         else
             zm_put_escaped_char(zm, c);
         crc >>= 8;
     }
     if (frameend == ZCRCW) {
-        putchar(XON);
-        fflush(stdout);
+        zreadline_write(XON);
     }
 }
-
-#if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ <= 4)
-#  undef DEBUG_BLOCKSIZE
-#endif
-
-#ifdef DEBUG_BLOCKSIZE
-struct debug_blocksize {
-    int size;
-    long count;
-};
-struct debug_blocksize blocksizes[]={
-{32,0},
-{64,0},
-{128,0},
-{256,0},
-{512,0},
-{1024,0},
-{2048,0},
-{4096,0},
-{8192,0},
-{0,0}
-};
-static inline void
-count_blk(int size)
-{
-    for (int i=0; blocksizes[i].size; i++) {
-        if (blocksizes[i].size==size) {
-            blocksizes[i].count++;
-            return;
-        }
-    }
-    blocksizes[i].count++;
-}
-
-#define COUNT_BLK(x) count_blk(x)
-#else
-#define COUNT_BLK(x)
-#endif
 
 /*
  * Receive array buf of max length with ending ZDLE sequence
@@ -631,7 +588,7 @@ crcfoo:
                     return ERROR;
                 }
                 *bytes_received = i;
-                COUNT_BLK(*bytes_received);
+                //COUNT_BLK(*bytes_received);
                 log_trace("zm_receive_data: %lu  %s", (unsigned long) (*bytes_received),
                           Zendnames[(d-GOTCRCE)&3]);
                 return d;
@@ -689,7 +646,7 @@ crcfoo:
                     return ERROR;
                 }
                 *bytes_received = i;
-                COUNT_BLK(*bytes_received);
+                //COUNT_BLK(*bytes_received);
                 log_trace("zm_read_data32: %lu %s", (unsigned long) *bytes_received,
                           Zendnames[(d-GOTCRCE)&3]);
                 return d;
@@ -728,8 +685,6 @@ int zm_get_header(zm_t *zm, uint32_t *payload)
     size_t rxpos=0;
     char *intro_msg;
 
-    /* Max bytes before start of frame */
-    max_intro_msg_len = zm->zrwindow + zm->baudrate;
     intro_msg = (char *) calloc (max_intro_msg_len + 1, sizeof(char));
     intro_msg_len = 0;
 
@@ -987,8 +942,6 @@ static int zm_read_hex_header(zm_t *zm)
 static void zputhex(int c, char *pos)
 {
     static char	digits[]	= "0123456789abcdef";
-
-    log_trace("zputhex: %02X", c);
     pos[0]=digits[(c&0xF0)>>4];
     pos[1]=digits[c&0x0F];
 }
@@ -1089,7 +1042,6 @@ void zm_ackbibi(zm_t *zm)
     log_debug("ackbibi:");
     zm_set_header_payload(zm, 0);
     for (n=3; --n>=0; ) {
-        zreadline_flushline(zm->zr);
         zm_send_hex_header(zm, ZFIN);
         switch (zreadline_getc(zm->zr,100)) {
         case 'O':
@@ -1122,9 +1074,8 @@ void zm_saybibi(zm_t *zm)
                          * characters, "OO" (Over and Out) and exits
                          * to the operating system or application that
                          * invoked it." */
-            putchar('O');
-            putchar('O');
-            fflush(stdout);
+            zreadline_write('O');
+            zreadline_write('O');
         case ZCAN:
         case TIMEOUT:
             return;

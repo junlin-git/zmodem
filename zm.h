@@ -150,7 +150,6 @@ typedef struct zm_ {
     /* 0:  no display */
     /* 1:  display printing characters only */
     /* 2:  display all non ZMODEM characters */
-    int baudrate;		/* Constant: in bps */
     int zrwindow;		/* RX window size (controls garbage count) */
 
     int zctlesc;            /* Variable: TRUE means to encode control characters */
@@ -166,7 +165,7 @@ typedef struct zm_ {
 }zm_t;
 
 zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
-              int rxtimeout, int znulls, int eflag, int baudrate, int zctlesc, int zrwindow);
+              int rxtimeout, int znulls, int eflag,int zctlesc, int zrwindow);
 int zm_get_zctlesc(zm_t *zm);
 void zm_set_zctlesc(zm_t *zm, int zctlesc);
 void zm_escape_sequence_update(zm_t *zm);
@@ -186,14 +185,12 @@ void zm_ackbibi (zm_t *zm);
 void zm_saybibi(zm_t *zm);
 int zm_do_crc_check(zm_t *zm, FILE *f, size_t remote_bytes, size_t check_bytes);
 
-
 double timing (int reset, time_t *nowp);
 
 
-#define log_info printf
-#define log_error printf
-#define log_trace printf
-#define log_fatal printf
+typedef void (*complete_call)(const char *filename, int result, size_t size, time_t date);
+typedef bool (*tick_call)(long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left);
+typedef bool (*approver_call)(const char *filename, size_t size, time_t date);
 #ifdef __cplusplus
 }
 #endif

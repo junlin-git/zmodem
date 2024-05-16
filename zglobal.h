@@ -64,14 +64,11 @@ struct zm_fileinfo {
 
 #define R_BYTESLEFT(x) ((x)->bytes_total-(x)->bytes_received)
 
+#define log_info(fmt, args...) HI_LOG_Print("info",__FUNCTION__, __LINE__,fmt, ##args)
+#define log_error(fmt, args...) HI_LOG_Print("error",__FUNCTION__, __LINE__, fmt, ##args)
+#define log_trace(fmt, args...) HI_LOG_Print("trace",__FUNCTION__, __LINE__, fmt, ##args)
+#define log_fatal(fmt, args...) HI_LOG_Print("fatal",__FUNCTION__, __LINE__, fmt, ##args)
+#define log_debug(fmt, args...) HI_LOG_Print("debug",__FUNCTION__, __LINE__, fmt, ##args)
 
-extern int iofd;
-
-
-int rdchk (int fd);
-int io_mode (int fd, int n) ;
-void sendbrk (int fd);
-
-const char * protname (void) ;
 
 #endif
