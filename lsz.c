@@ -130,7 +130,7 @@ static char Myattn[] = { 0 };
 static size_t zmodem_send(char *file_list,complete_call complete)
 {
     int fd_tty=-1;
-    init_uart(&fd_tty,"/dev/ttyUSB1");
+    init_uart(&fd_tty,"/dev/ttyAMA2");
     sz_t *sz = sz_init(fd_tty, /* fd */
                        128, /* readnum */
                        256, /* bufsize */
@@ -833,12 +833,13 @@ static void complete_cb(const char *filename, int result, size_t size, time_t da
         fprintf(stderr, "'%s': failed to send\n", filename);
 }
 
+#ifdef SZ
 int main(int argc, char *argv[])
 {
-    char *filenames= "/home/junlin/opensoure/zbar-0.10.tar.bz2";
-    //char *filenames= "/home/junlin/beyondcompare.sh";
+    //char *filenames= "/home/junlin/opensoure/zbar-0.10.tar.bz2";
+    char *filenames= "/app/main_app";
     zmodem_send(filenames,&complete_cb);
     return 0;
 }
-
+#endif
 /* End of lsz.c */

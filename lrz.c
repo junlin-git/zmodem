@@ -38,7 +38,8 @@
 #include "zglobal.h"
 #include "crctab.h"
 #include "zm.h"
-
+#include "zm.h"
+#include "uart.h"
 #define MAX_BLOCK 8192
 
 
@@ -137,18 +138,13 @@ rz_t *rz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
 static int rz_receive_files (rz_t *rz, struct zm_fileinfo *);
 static int rz_zmodem_session_startup (rz_t *rz);
 static void rz_checkpath (rz_t *rz, const char *name);
-static void report (int sct);
 static void uncaps (char *s);
 static int IsAnyLower (const char *s);
 static int rz_write_string_to_file (rz_t *rz, struct zm_fileinfo *zi, char *buf, size_t n);
 static int rz_process_header (rz_t *rz, char *name, struct zm_fileinfo *);
-static int rz_receive_sector (rz_t *rz, size_t *Blklen, char *rxbuf, unsigned int maxtime);
-static int rz_receive_sectors (rz_t *rz, struct zm_fileinfo *);
-static int rz_receive_pathname (rz_t *rz, struct zm_fileinfo *, char *rpn);
 static int rz_receive (rz_t *rz);
 static int rz_receive_file (rz_t *rz, struct zm_fileinfo *);
 static int rz_closeit (rz_t *rz, struct zm_fileinfo *);
-static void write_modem_escaped_string_to_stdout (const char *s);
 static size_t getfree (void);
 
 rz_t* rz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
@@ -197,18 +193,6 @@ rz_t* rz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
 
 }
 
-/* called by signal interrupt or terminate to clean things up */
-static void bibi(int n)
-{
-    //FIXME: figure out how to avoid global zmodem_requested
-    // if (zmodem_requested)
-    // 	write_modem_escaped_string_to_stdout(Attn);
-//    canit(zr, STDOUT_FILENO);
-//    io_mode(0,0);
-    log_fatal("caught signal %s; exiting", n);
-    exit(128+n);
-}
-
 /*
  * Let's receive something already.
  */
@@ -219,7 +203,9 @@ static size_t zmodem_receive(const char *directory,
                       void (*complete_cb)(const char *filename, int result, size_t size, time_t date)
                       )
 {
-    rz_t *rz = rz_init(0, /* fd */
+    int fd_tty=-1;
+    init_uart(&fd_tty,"/dev/ttyUSB1");
+    rz_t *rz = rz_init(fd_tty, /* fd */
                        8192, /* readnum */
                        16384, /* bufsize */
                        1, /* no_timeout */
@@ -253,8 +239,6 @@ static size_t zmodem_receive(const char *directory,
         exitcode=0200;
         zreadline_canit(rz->zm->zr);
     }
-    if (exitcode && !rz->zm->zmodem_requested)
-        zreadline_canit(rz->zm->zr);
     if (exitcode)
         log_info("Transfer incomplete");
     else
@@ -289,28 +273,6 @@ static int rz_receive(rz_t *rz)
 
         if (c)
             goto fubar;
-    } else {
-        for (;;) {
-            timing(1,NULL);
-            if (rz_receive_pathname(rz, &zi, rz->secbuf)== ERROR)
-                goto fubar;
-            if (rz->secbuf[0]==0)
-                return OK;
-            if (rz_process_header(rz, rz->secbuf, &zi) == ERROR)
-                goto fubar;
-            if (rz_receive_sectors(rz, &zi)==ERROR)
-                goto fubar;
-
-            double d;
-            long bps;
-            d=timing(0,NULL);
-            if (d==0)
-                d=0.5; /* can happen if timing uses time() */
-            bps=(zi.bytes_received-zi.bytes_skipped)/d;
-
-            log_info("\rBytes received: %7ld/%7ld   BPS:%-6ld",
-                        (long) zi.bytes_received, (long) zi.bytes_total, bps);
-        }
     }
     return OK;
 fubar:
@@ -325,175 +287,6 @@ fubar:
         unlink(rz->pathname);
 
     }
-    return ERROR;
-}
-
-
-/*
- * Fetch a pathname from the other end as a C ctyle ASCIZ string.
- * Length is indeterminate as long as less than Blklen
- */
-static int rz_receive_pathname(rz_t *rz, struct zm_fileinfo *zi, char *rpn)
-{
-    int c;
-    size_t Blklen=0;		/* record length of received packets */
-
-
-
-et_tu:
-    rz->firstsec=TRUE;
-    zi->eof_seen=FALSE;
-    zreadline_write(WANTCRC);
-    while ((c = rz_receive_sector(rz, &Blklen, rpn, 100)) != 0) {
-        if (c == WCEOT) {
-            log_error( "Pathname fetch returned EOT");
-            zreadline_write(ACK);
-            goto et_tu;
-        }
-        return ERROR;
-    }
-    zreadline_write(ACK);
-    return OK;
-}
-
-/*
- * Adapted from CMODEM13.C, written by
- * Jack M. Wierda and Roderick W. Hart
- */
-static int rz_receive_sectors(rz_t *rz, struct zm_fileinfo *zi)
-{
-    int sectnum, sectcurr;
-    char sendchar;
-    size_t Blklen;
-
-    rz->firstsec=TRUE;sectnum=0;
-    zi->eof_seen=FALSE;
-    sendchar=WANTCRC;
-
-    for (;;) {
-        zreadline_write(sendchar);	/* send it now, we're ready! */
-            /* Do read next time ... */
-        sectcurr=rz_receive_sector(rz, &Blklen, rz->secbuf,
-                                   (unsigned int) ((sectnum&0177) ? 50 : 130));
-        report(sectcurr);
-        if (sectcurr==((sectnum+1) &0377)) {
-            sectnum++;
-            if (zi->bytes_total && R_BYTESLEFT(zi) < Blklen)
-                Blklen=R_BYTESLEFT(zi);
-            zi->bytes_received+=Blklen;
-            if (rz_write_string_to_file(rz, zi, rz->secbuf, Blklen)==ERROR)
-                return ERROR;
-            sendchar=ACK;
-        }
-        else if (sectcurr==(sectnum&0377)) {
-            log_error("Received dup Sector");
-            sendchar=ACK;
-        }
-        else if (sectcurr==WCEOT) {
-            if (rz_closeit(rz, zi))
-                return ERROR;
-            zreadline_write(ACK);
-                /* Do read next time ... */
-            return OK;
-        }
-        else if (sectcurr==ERROR)
-            return ERROR;
-        else {
-            log_error("Sync Error");
-            return ERROR;
-        }
-    }
-}
-
-/*
- * Rz_Receive_Sector fetches a Ward Christensen type sector.
- * Returns sector number encountered or ERROR if valid sector not received,
- * or CAN CAN received
- * or WCEOT if eot sector
- * time is timeout for first char, set to 4 seconds thereafter
- ***************** NO ACK IS SENT IF SECTOR IS RECEIVED OK **************
- *    (Caller must do that when he is good and ready to get next sector)
- */
-static int rz_receive_sector(rz_t *rz, size_t *Blklen, char *rxbuf, unsigned int maxtime)
-{
-    int checksum, wcj, firstch;
-    unsigned short oldcrc;
-    char *p;
-    int sectcurr;
-
-    rz->lastrx = 0;
-    for (rz->errors = 0; rz->errors < RETRYMAX; rz->errors++) {
-
-        if ((firstch=zreadline_getc(rz->zm->zr, maxtime))==STX) {
-            *Blklen=1024; goto get2;
-        }
-        if (firstch==SOH) {
-            *Blklen=128;
-get2:
-            sectcurr=0;
-            if ((sectcurr+(oldcrc=zreadline_getc(rz->zm->zr, 1)))==0377) {
-                oldcrc=checksum=0;
-                for (p=rxbuf,wcj=*Blklen; --wcj>=0; ) {
-                    if ((firstch=zreadline_getc(rz->zm->zr, 1)) < 0)
-                        goto bilge;
-                    oldcrc=updcrc(firstch, oldcrc);
-                    checksum += (*p++ = firstch);
-                }
-                if ((firstch=zreadline_getc(rz->zm->zr,1)) < 0)
-                    goto bilge;
-                oldcrc=updcrc(firstch, oldcrc);
-                if ((firstch=zreadline_getc(rz->zm->zr,1)) < 0)
-                    goto bilge;
-                oldcrc=updcrc(firstch, oldcrc);
-                if (oldcrc & 0xFFFF)
-                    log_error("CRC");
-                else {
-                    rz->firstsec=FALSE;
-                    return sectcurr;
-                }
-            }
-            else
-                log_error("Sector number garbled");
-        }
-        /* make sure eot really is eot and not just mixmash */
-        else if (firstch==EOT && zreadline_getc(rz->zm->zr,1)==TIMEOUT)
-            return WCEOT;
-        else if (firstch==CAN) {
-            if (rz->lastrx==CAN) {
-                log_error("Sender Cancelled");
-                return ERROR;
-            } else {
-                rz->lastrx=CAN;
-                continue;
-            }
-        }
-        else if (firstch==TIMEOUT) {
-            if (rz->firstsec)
-                goto humbug;
-bilge:
-            log_error("TIMEOUT");
-        }
-        else
-            log_error("Got 0%o sector header", firstch);
-
-humbug:
-        rz->lastrx=0;
-        {
-            int cnt=1000;
-            while(cnt-- && zreadline_getc(rz->zm->zr,1)!=TIMEOUT)
-                ;
-        }
-        if (rz->firstsec) {
-            zreadline_write(WANTCRC);
-                /* Do read next time ... */
-        } else {
-            maxtime=40;
-            zreadline_write(NAK);
-                /* Do read next time ... */
-        }
-    }
-    /* try to stop the bubble machine. */
-    zreadline_canit(rz->zm->zr);
     return ERROR;
 }
 
@@ -816,11 +609,6 @@ static int IsAnyLower(const char *s)
     return FALSE;
 }
 
-static void report(int sct)
-{
-    log_debug("Blocks received: %d",sct);
-}
-
 
 /*
  * Totalitarian Communist pathname processing
@@ -838,7 +626,6 @@ static void rz_checkpath(rz_t *rz, const char *name)
          * don't overwrite hidden files in restricted mode */
         if ((rz->restricted==2 || *name=='.') && fopen(name, "r") != NULL) {
             zreadline_canit(rz->zm->zr);
-            bibi(-1);
         }
         /* restrict pathnames to current tree or uucppublic */
         if ( strstr(name, "../")
@@ -848,12 +635,10 @@ static void rz_checkpath(rz_t *rz, const char *name)
      #endif
              ) {
             zreadline_canit(rz->zm->zr);
-            bibi(-1);
         }
         if (rz->restricted > 1) {
             if (name[0]=='.' || strstr(name,"/.")) {
                 zreadline_canit(rz->zm->zr);
-                bibi(-1);
             }
         }
     }
@@ -1144,7 +929,6 @@ skip_oosb:
                 log_debug("rz_receive_file: zm_get_header returned %d", c);
                 return ERROR;
             }
-            write_modem_escaped_string_to_stdout(rz->attn);
             continue;
         case ZSKIP:
             rz_closeit(rz, zi);
@@ -1181,7 +965,7 @@ skip_oosb:
                             free(neu);
                     }
                 }
-                write_modem_escaped_string_to_stdout(rz->attn);  continue;
+                continue;
             }
 moredata:
             if ((rz->min_bps || rz->stop_time || rz->tick_cb)
@@ -1242,7 +1026,6 @@ moredata:
                     log_debug("rz_receive_file: zm_get_header returned %d", c);
                     return ERROR;
                 }
-                write_modem_escaped_string_to_stdout(rz->attn);
                 continue;
             case TIMEOUT:
                 if ( --n < 0) {
@@ -1276,35 +1059,6 @@ moredata:
                 goto nxthdr;
             }
         }
-    }
-}
-
-/*
- * Send a string to the modem, processing for \336 (sleep 1 sec)
- *   and \335 (break signal)
- */
-static void write_modem_escaped_string_to_stdout(const char *s)
-{
-    const char *p;
-
-    while (s && *s)
-    {
-        p=strpbrk(s,"\335\336");
-        if (!p)
-        {
-            write(1,s,strlen(s));
-            return;
-        }
-        if (p!=s)
-        {
-            write(1,s,(size_t) (p-s));
-            s=p;
-        }
-//        if (*p=='\336')
-//            sleep(1);
-//        else
-//            sendbrk(0);
-        p++;
     }
 }
 
@@ -1357,8 +1111,6 @@ static int rz_closeit(rz_t *rz, struct zm_fileinfo *zi)
 }
 
 
-
-
 /*
  * Routine to calculate the free bytes on the current file system
  *  ~0 means many free bytes (unknown)
@@ -1383,7 +1135,6 @@ static bool tick_cb(const char *fname, long bytes_sent, long bytes_total, long l
                 last_bps, min_left, sec_left);
         last_sec_left = sec_left;
     }
-    usleep(10000);
     return true;
 }
 
@@ -1396,15 +1147,13 @@ static void complete_cb(const char *filename, int result, size_t size, time_t da
         fprintf(stderr, "'%s': failed to receive\n", filename);
 }
 
-int main_1(int argc, char *argv[])
+#ifndef SZ
+int main(int argc, char *argv[])
 {
-
-    size_t bytes = zmodem_receive(NULL, /* use current directory */
+    return zmodem_receive(NULL, /* use current directory */
                                   &approver_cb, /* receive everything */
                                   &tick_cb,
                                   &complete_cb);
-    fprintf(stderr, "Received %zu bytes.\n", bytes);
-    return 0;
 }
-
+#endif
 /* End of lrz.c */

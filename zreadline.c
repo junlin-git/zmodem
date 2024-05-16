@@ -30,7 +30,7 @@ zreadline_t *zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeo
  */
 static int readline_internal(zreadline_t *zr, unsigned int timeout)
 {
-    log_trace("Calling read: Readnum=%d ", zr->readline_readnum);
+    //log_trace("Calling read: Readnum=%d ", zr->readline_readnum);
     zr->readline_ptr = zr->readline_buffer;
     unsigned int loop=0;
     while (1) {
@@ -40,12 +40,11 @@ static int readline_internal(zreadline_t *zr, unsigned int timeout)
                                  zr->readline_ptr,
                                  zr->readline_readnum);
         if(zr->readline_left>0)break;
-        usleep(1000*100);
+        usleep(1000*10);
     }
     if (zr->readline_left == -1)
         log_trace("Read failure :%s\n", strerror(errno));
-    else
-        log_trace("Read returned %d bytes\n", zr->readline_left);
+
     if (zr->readline_left < 1)
         return TIMEOUT;
     zr->readline_left -- ;

@@ -12,3 +12,7 @@ SOURCES += \
     uart.c \
     zm.c \
     zreadline.c
+
+DISTFILES += \
+    CMakeLists.txt
+
