@@ -105,6 +105,11 @@ zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     zm_escape_sequence_init(zm);
     return zm;
 }
+void zm_deinit(zm_t *zm)
+{
+    if(zm)free(zm);
+    zm=NULL;
+}
 
 
 double timing (int reset, time_t *nowp)
@@ -588,7 +593,6 @@ crcfoo:
                     return ERROR;
                 }
                 *bytes_received = i;
-                //COUNT_BLK(*bytes_received);
                 log_trace("zm_receive_data: %lu  %s", (unsigned long) (*bytes_received),
                           Zendnames[(d-GOTCRCE)&3]);
                 return d;
@@ -681,13 +685,7 @@ crcfoo:
 int zm_get_header(zm_t *zm, uint32_t *payload)
 {
     int c, cancount;
-    unsigned int intro_msg_len, max_intro_msg_len;
     size_t rxpos=0;
-    char *intro_msg;
-
-    intro_msg = (char *) calloc (max_intro_msg_len + 1, sizeof(char));
-    intro_msg_len = 0;
-
     zm->rxframeind = zm->rxtype = 0;
 
 startover:
@@ -728,14 +726,6 @@ gotcan:
         /* **** FALL THRU TO **** */
     default:
 agn2:
-        if (intro_msg_len > max_intro_msg_len) {
-            log_error("Intro message length exceeded");
-            return(ERROR);
-        }
-        if (zm->eflag == 1 && isprint(c))
-            intro_msg[intro_msg_len++] = c;
-        else if (zm->eflag == 2)
-            intro_msg[intro_msg_len++] = c;
         goto startover;
         break;
 
@@ -817,13 +807,6 @@ fifi:
     }
     if (payload)
         *payload = rxpos;
-
-    /* If we got an intro message, log it. */
-    if (intro_msg_len > 0) {
-        log_info("zm_get_header: received intro msg from sender...");
-        log_info(intro_msg);
-    }
-    free(intro_msg);
 
     return c;
 }
@@ -986,8 +969,6 @@ void zm_escape_sequence_init(zm_t *zm)
     }
 }
 
-
-
 /* Store pos in Txhdr */
 void zm_set_header_payload(zm_t *zm, uint32_t val)
 {
@@ -1029,7 +1010,6 @@ long zm_reclaim_receive_header(zm_t *zm)
     l = (l << 8) | (zm->Rxhdr[ZP0] & 0xFF);
     return l;
 }
-
 
 
 /*

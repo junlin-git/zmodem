@@ -52,7 +52,6 @@ typedef struct sz_ {
     int error_count;
     jmp_buf intrjmp;	/* For the interrupt on RX CAN */
     // parameters
-    int lskipnocor;
     int no_unixmode;
     int filesleft;
     int restricted;
@@ -62,9 +61,7 @@ typedef struct sz_ {
     unsigned tframlen;
     int wantfcs32;	/* want to send 32 bit FCS */
     size_t max_blklen;
-    int hyperterm;
-
-    void (*complete_cb)(const char *filename, int result, size_t size, time_t date);
+    //    void (*complete_cb)(const char *filename, int result, size_t size, time_t date);
 
 } sz_t;
 
@@ -74,9 +71,7 @@ static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
                      unsigned txwspac,
                      int under_rsh, int no_unixmode, int restricted,
                      unsigned blkopt, int wantfcs32,
-                     size_t max_blklen, time_t stop_time,
-                     int hyperterm,
-                     complete_call complete_cb
+                     size_t max_blklen, time_t stop_time
                      )
 {
     sz_t *sz = malloc(sizeof(sz_t));
@@ -94,9 +89,14 @@ static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     sz->wantfcs32 = wantfcs32;
     sz->max_blklen = max_blklen;
     sz->stop_time = stop_time;
-    sz->hyperterm = hyperterm;
-    sz->complete_cb = complete_cb;
     return sz;
+}
+
+void sz_deinit(sz_t *sz)
+{
+    if(sz->zm)free(sz->zm);
+    if(sz)free(sz);
+    sz=NULL;
 }
 
 static int sz_transmit_file_by_zmodem (sz_t *sz, struct zm_fileinfo *zi, const char *buf, size_t blen);
@@ -108,7 +108,6 @@ static int sz_getzrxinit (sz_t *sz);
 static int sz_sendzsinit (sz_t *sz);
 static int sz_transmit_file_contents_by_zmodem (sz_t *sz, struct zm_fileinfo *);
 static int sz_getinsync (sz_t *sz, struct zm_fileinfo *, int flag);
-static int sz_transmit_sector (sz_t *sz, char *buf, int sectnum, size_t cseclen);
 
 #define ZM_SEND_DATA(x,y,z)						\
     do { if (sz->zm->crc32t) {zm_send_data32(sz->zm,x,y,z); } else {zm_send_data(sz->zm,x,y,z);}} while(0)
@@ -127,10 +126,10 @@ static char Myattn[] = { 0 };
 
 #define MK_STRING(x) #x
 
-static size_t zmodem_send(char *file_list,complete_call complete)
+static size_t zmodem_send(char *filename)
 {
     int fd_tty=-1;
-    init_uart(&fd_tty,"/dev/ttyAMA2");
+    init_uart(&fd_tty,"/dev/ttyUSB1");
     sz_t *sz = sz_init(fd_tty, /* fd */
                        128, /* readnum */
                        256, /* bufsize */
@@ -147,9 +146,7 @@ static size_t zmodem_send(char *file_list,complete_call complete)
                        0,	  /* blkopt */
                        0,	  /* wantfcs32 */
                        1024,  /* max_blklen */
-                       0,	  /* stop_time */
-                       0,	  /* hyperterm */
-                       complete  /* file complete callback */
+                       0	  /* stop_time */
                        );
     log_info("initial protocol is ZMODEM");
     zm_set_header_payload(sz->zm, 0L);
@@ -157,7 +154,7 @@ static size_t zmodem_send(char *file_list,complete_call complete)
     //ZRINIT 回应接收能力(rz的实现是在空闲状态每过几秒就发送一次这个指令，多次无响应后退出)
     sz->exitcode=0;
     /* This is the main loop.  */
-    if (sz_transmit_file(sz, file_list)==ERROR) {
+    if (sz_transmit_file(sz, filename)==ERROR) {
         sz->exitcode=0200;
         zreadline_canit(sz->zm->zr);
     }
@@ -166,7 +163,8 @@ static size_t zmodem_send(char *file_list,complete_call complete)
     else
         log_info("Transfer incomplete");
 
-    return sz->exitcode;
+    sz_deinit(sz);
+    return 0;
 }
 
 
@@ -216,19 +214,6 @@ static int sz_transmit_file(sz_t *sz, const char *filename)
         log_error("skipped: %s", name);
         return OK;
     }
-
-    /* Here we make a log message the transmission of a single
-     * file. */
-    long bps;
-    double d=timing(0,NULL);
-    if (d==0) /* can happen if timing() uses time() */
-        d=0.5;
-    bps=zi.bytes_sent/d;
-    log_debug("Bytes Sent:%7ld   BPS:%-8ld",
-              (long) zi.bytes_sent,bps);
-    if (sz->complete_cb)
-        sz->complete_cb(zi.fname, 0, zi.bytes_sent, zi.modtime);
-
     zm_saybibi(sz->zm);
     return 0;
 }
@@ -253,9 +238,7 @@ static int sz_transmit_pathname(sz_t *sz, struct zm_fileinfo *zi)
             log_debug("sz_getnak failed");
             return ERROR;
         }
-
     q = (char *) 0;
-
 
     for (p=zi->fname, q=sz->txbuf ; *p; )
         if ((*q++ = *p++) == '/')
@@ -265,24 +248,20 @@ static int sz_transmit_pathname(sz_t *sz, struct zm_fileinfo *zi)
     while (q < (sz->txbuf + MAX_BLOCK))
         *q++ = 0;
     if ((sz->input_f!=stdin) && *zi->fname && (fstat(fileno(sz->input_f), &f)!= -1)) {
-        if (sz->hyperterm) {
-            sprintf(p, "%lu", (long) f.st_size);
-        } else {
-            /* note that we may lose some information here
+        /* note that we may lose some information here
              * in case mode_t is wider than an int. But i believe
              * sending %lo instead of %o _could_ break compatability
              */
 
-            /* Spec 8.2: "[the sender will send a] ZCRCW
+        /* Spec 8.2: "[the sender will send a] ZCRCW
              * data subpacket containing the file name,
              * file length, modification date, and other
              * information identical to that used by
              * YMODEM batch." */
-            sprintf(p, "%lu %lo %o 0 %d %ld", (long) f.st_size,
-                    f.st_mtime,
-                    (unsigned int)((sz->no_unixmode) ? 0 : f.st_mode),
-                    sz->filesleft, sz->totalleft);
-        }
+        sprintf(p, "%lu %lo %o 0 %d %ld", (long) f.st_size,
+                f.st_mtime,
+                (unsigned int)((sz->no_unixmode) ? 0 : f.st_mode),
+                sz->filesleft, sz->totalleft);
     }
     log_info("Sending: %s  %s",sz->txbuf,p);
     sz->totalleft -= f.st_size;
@@ -303,11 +282,6 @@ static int sz_transmit_pathname(sz_t *sz, struct zm_fileinfo *zi)
     if (sz->zm->zmodem_requested)
         return sz_transmit_file_by_zmodem(sz, zi, sz->txbuf, 1+strlen(p)+(p-sz->txbuf));
 
-    /* We'll have to send the file by YModem, I guess.  */
-    if (sz_transmit_sector(sz, sz->txbuf, 0, 128)==ERROR) {
-        log_debug("sz_transmit_sector failed");
-        return ERROR;
-    }
     return OK;
 }
 
@@ -374,80 +348,6 @@ static int sz_getnak(sz_t *sz)
         }
         sz->lastrx = firstch;
     }
-}
-
-static int sz_transmit_sector(sz_t *sz, char *buf, int sectnum, size_t cseclen)
-{
-    int checksum, wcj;
-    char *cp;
-    unsigned oldcrc;
-    int firstch;
-    int attempts;
-
-    firstch=0;	/* part of logic to detect CAN CAN */
-
-    log_debug("Zmodem sectors/kbytes sent: %3d/%2dk", sz->totsecs, sz->totsecs/8 );
-    for (attempts=0; attempts <= RETRYMAX; attempts++) {
-        sz->lastrx= firstch;
-        zreadline_write(cseclen==1024?STX:SOH);
-        zreadline_write(sectnum & 0xFF);
-        /* FIXME: clarify the following line - mlg */
-        zreadline_write((-sectnum -1) & 0xFF);
-        oldcrc=checksum=0;
-        for (wcj=cseclen,cp=buf; --wcj>=0; ) {
-            zreadline_write(*cp);
-            oldcrc=updcrc((0377& *cp), oldcrc);
-            checksum += *cp++;
-        }
-        if (sz->crcflg) {
-            oldcrc=updcrc(0,updcrc(0,oldcrc));
-            zreadline_write(((int)oldcrc>>8) & 0xFF);
-            zreadline_write(((int)oldcrc) & 0xFF);
-        }
-        else
-            zreadline_write(checksum & 0xFF);
-
-
-        if (sz->optiong) {
-            sz->firstsec = FALSE; return OK;
-        }
-        firstch = zreadline_getc(sz->zm->zr, sz->zm->rxtimeout);
-gotnak:
-        switch (firstch) {
-        case CAN:
-            if(sz->lastrx == CAN) {
-cancan:
-                log_error( "Cancelled");  return ERROR;
-            }
-            break;
-        case TIMEOUT:
-            log_error( "Timeout on sector ACK"); continue;
-        case WANTCRC:
-            if (sz->firstsec)
-                sz->crcflg = TRUE;
-        case NAK:
-            log_error( "NAK on sector"); continue;
-        case ACK:
-            sz->firstsec=FALSE;
-            sz->totsecs += (cseclen>>7);
-            return OK;
-        case ERROR:
-            log_error( "Got burst for sector ACK"); break;
-        default:
-            log_error( "Got %02x for sector ACK", firstch); break;
-        }
-        for (;;) {
-            sz->lastrx = firstch;
-            if ((firstch = zreadline_getc(sz->zm->zr, sz->zm->rxtimeout)) == TIMEOUT)
-                break;
-            if (firstch == NAK || firstch == WANTCRC)
-                goto gotnak;
-            if (firstch == CAN && sz->lastrx == CAN)
-                goto cancan;
-        }
-    }
-    log_error( "Retry Count Exceeded");
-    return ERROR;
 }
 
 /* Fill buffer with blklen chars */
@@ -596,10 +496,8 @@ static int sz_transmit_file_by_zmodem(sz_t *sz, struct zm_fileinfo *zi, const ch
          * containing the file name, ...." */
         sz->zm->Txhdr[ZF0] =0;// 	/* file conversion request */
         sz->zm->Txhdr[ZF1] =0; //	/* file management request */
-        if (sz->lskipnocor)
-            sz->zm->Txhdr[ZF1] |= ZF1_ZMSKNOLOC;
-        sz->zm->Txhdr[ZF2] = 0;	/* file transport compression request */
-        sz->zm->Txhdr[ZF3] = 0; /* extended options */
+        sz->zm->Txhdr[ZF2] =0;	/* file transport compression request */
+        sz->zm->Txhdr[ZF3] =0; /* extended options */
         zm_send_binary_header(sz->zm, ZFILE);
         ZM_SEND_DATA(buf, blen, ZCRCW);
 again:
@@ -740,38 +638,38 @@ waitack:
         log_trace("%c n=%d %d max_blklen=%ld %d bytcnt=%d",
                   e,n,fileno(sz->input_f),sz->max_blklen,zi->eof_seen,sz->bytcnt);
         sz->bytcnt = zi->bytes_sent += n;
-        if (e == ZCRCW)
+        if (e == ZCRCW||e==ZCRCQ)
             /* Spec 8.2: "ZCRCW data subpackets expect a
              * response before the next frame is sent." */
             goto waitack;
     } while (!zi->eof_seen);
 
-        for (;;) {
-            /* Spec 8.2: [after sending a file] The sender sends a
+    for (;;) {
+        /* Spec 8.2: [after sending a file] The sender sends a
          * ZEOF header with the file ending offset equal to
          * the number of characters in the file. */
-            log_trace("bytes_sent=%d\r\n",zi->bytes_sent);
-            zm_set_header_payload (sz->zm, zi->bytes_sent);
-            zm_send_binary_header (sz->zm, ZEOF);
-            switch (sz_getinsync (sz, zi, 0)) {
-            case ZACK:
-                continue;
-            case ZRPOS:
-                goto somemore;
-            case ZRINIT:
-                /* If the receiver is satisfied with the file,
+        log_trace("bytes_sent=%d\r\n",zi->bytes_sent);
+        zm_set_header_payload (sz->zm, zi->bytes_sent);
+        zm_send_binary_header (sz->zm, ZEOF);
+        switch (sz_getinsync (sz, zi, 0)) {
+        case ZACK:
+            continue;
+        case ZRPOS:
+            goto somemore;
+        case ZRINIT:
+            /* If the receiver is satisfied with the file,
              * it returns ZRINIT. */
-                return OK;
-            case ZSKIP:
-                if (sz->input_f)
-                    fclose (sz->input_f);
-                return c;
-            default:
-                if (sz->input_f)
-                    fclose (sz->input_f);
-                return ERROR;
-            }
+            return OK;
+        case ZSKIP:
+            if (sz->input_f)
+                fclose (sz->input_f);
+            return c;
+        default:
+            if (sz->input_f)
+                fclose (sz->input_f);
+            return ERROR;
         }
+    }
 }
 
 /*
@@ -823,22 +721,12 @@ static int sz_getinsync(sz_t *sz, struct zm_fileinfo *zi, int flag)
     }
 }
 
-
-
-static void complete_cb(const char *filename, int result, size_t size, time_t date)
-{
-    if (result == RZSZ_NO_ERROR)
-        fprintf(stderr, "'%s (%zu bytes)': successful send\n", filename, size);
-    else
-        fprintf(stderr, "'%s': failed to send\n", filename);
-}
-
 #ifdef SZ
 int main(int argc, char *argv[])
 {
-    //char *filenames= "/home/junlin/opensoure/zbar-0.10.tar.bz2";
-    char *filenames= "/app/main_app";
-    zmodem_send(filenames,&complete_cb);
+    char *filenames= "/home/junlin/opensoure/zbar-0.10.tar.bz2";
+    //char *filenames= "/app/main_app";
+    zmodem_send(filenames);
     return 0;
 }
 #endif

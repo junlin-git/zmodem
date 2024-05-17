@@ -16,3 +16,5 @@ SOURCES += \
 DISTFILES += \
     CMakeLists.txt
 
+
+#DEFINES+=SZ

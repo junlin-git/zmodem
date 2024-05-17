@@ -4,21 +4,19 @@
 #include <signal.h>
 #include <ctype.h>
 #include <errno.h>
-static zreadline_t *zr_cache=NULL;
+static zreadline_t zr_cache;
 zreadline_t *zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeout)
 {
-    zreadline_t *zr = (zreadline_t *) malloc (sizeof(zreadline_t));
-    memset (zr, 0, sizeof(zreadline_t));
-    zr->readline_fd = fd;
-    zr->readline_readnum = readnum;
-    zr->readline_buffer = malloc(bufsize > readnum ? bufsize : readnum);
-    if (!zr->readline_buffer) {
+    memset (&zr_cache, 0, sizeof(zreadline_t));
+    zr_cache.readline_fd = fd;
+    zr_cache.readline_readnum = readnum;
+    zr_cache.readline_buffer = malloc(bufsize > readnum ? bufsize : readnum);
+    if (!zr_cache.readline_buffer) {
         log_fatal("out of memory");
         exit(1);
     }
-    zr->no_timeout = no_timeout;
-    zr_cache=zr;
-    return zr;
+    zr_cache.no_timeout = no_timeout;
+    return &zr_cache;
 }
 
 
@@ -30,7 +28,6 @@ zreadline_t *zreadline_init(int fd, size_t readnum, size_t bufsize, int no_timeo
  */
 static int readline_internal(zreadline_t *zr, unsigned int timeout)
 {
-    //log_trace("Calling read: Readnum=%d ", zr->readline_readnum);
     zr->readline_ptr = zr->readline_buffer;
     unsigned int loop=0;
     while (1) {
@@ -75,7 +72,7 @@ void zreadline_flush(zreadline_t *zr)
 
 void zreadline_write(char c)
 {
-     write(zr_cache->readline_fd,&c,1);
+     write(zr_cache.readline_fd,&c,1);
 }
 /* send cancel string to get the other end to shut up */
 void zreadline_canit (zreadline_t *zr)

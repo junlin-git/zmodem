@@ -166,6 +166,7 @@ typedef struct zm_ {
 
 zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
               int rxtimeout, int znulls, int eflag,int zctlesc, int zrwindow);
+void zm_deinit(zm_t *zm);
 int zm_get_zctlesc(zm_t *zm);
 void zm_set_zctlesc(zm_t *zm, int zctlesc);
 void zm_escape_sequence_update(zm_t *zm);
@@ -186,7 +187,6 @@ void zm_saybibi(zm_t *zm);
 int zm_do_crc_check(zm_t *zm, FILE *f, size_t remote_bytes, size_t check_bytes);
 
 double timing (int reset, time_t *nowp);
-
 
 typedef void (*complete_call)(const char *filename, int result, size_t size, time_t date);
 typedef bool (*tick_call)(long bytes_sent, long bytes_total, long last_bps, int min_left, int sec_left);
