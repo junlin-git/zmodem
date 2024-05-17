@@ -67,7 +67,7 @@ typedef struct sz_ {
 
 
 static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
-                     int rxtimeout, int znulls, int eflag, int zctlesc, int zrwindow,
+                     int rxtimeout, int znulls, int eflag, int zctlesc,
                      unsigned txwspac,
                      int under_rsh, int no_unixmode, int restricted,
                      unsigned blkopt, int wantfcs32,
@@ -77,7 +77,7 @@ static sz_t* sz_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     sz_t *sz = malloc(sizeof(sz_t));
     memset(sz, 0, sizeof(sz_t));
     sz->zm = zm_init(fd, readnum, bufsize, no_timeout,
-                     rxtimeout, znulls, eflag, zctlesc, zrwindow);
+                     rxtimeout, znulls, eflag, zctlesc);
     sz->txwspac = txwspac;
     sz->txwcnt = 0;
     sz->under_rsh = under_rsh;
@@ -138,7 +138,6 @@ static size_t zmodem_send(char *filename)
                        0, 	/* znulls */
                        0,	/* eflag */
                        0,	 /* zctlesc */
-                       1400, /* zrwindow */
                        0,	  /* txwspac */
                        0,	  /* under_rsh */
                        0,	  /* no_unixmode */

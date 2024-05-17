@@ -92,7 +92,7 @@ static void zm_put_escaped_string(zm_t *zm, const char *str, size_t len);
 
 /* Return a newly allocated state machine for zm primitives. */
 zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
-        int rxtimeout, int znulls, int eflag, int zctlesc, int zrwindow)
+        int rxtimeout, int znulls, int eflag, int zctlesc)
 {
     zm_t *zm = (zm_t *) malloc (sizeof (zm_t));
     memset(zm, 0, sizeof(zm_t));
@@ -101,7 +101,6 @@ zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
     zm->znulls = znulls;
     zm->eflag = eflag;
     zm->zctlesc = zctlesc;
-    zm->zrwindow = zrwindow;
     zm_escape_sequence_init(zm);
     return zm;
 }
@@ -593,8 +592,6 @@ crcfoo:
                     return ERROR;
                 }
                 *bytes_received = i;
-                log_trace("zm_receive_data: %lu  %s", (unsigned long) (*bytes_received),
-                          Zendnames[(d-GOTCRCE)&3]);
                 return d;
             }
             case GOTCAN:
@@ -650,7 +647,6 @@ crcfoo:
                     return ERROR;
                 }
                 *bytes_received = i;
-                //COUNT_BLK(*bytes_received);
                 log_trace("zm_read_data32: %lu %s", (unsigned long) *bytes_received,
                           Zendnames[(d-GOTCRCE)&3]);
                 return d;

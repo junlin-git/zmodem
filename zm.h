@@ -147,10 +147,6 @@ typedef struct zm_ {
     int rxtimeout;          /* Constant: tenths of seconds to wait for something */
     int znulls;             /* Constant: Number of nulls to send at beginning of ZDATA hdr */
     int eflag;              /* Constant: local display of non zmodem characters */
-    /* 0:  no display */
-    /* 1:  display printing characters only */
-    /* 2:  display all non ZMODEM characters */
-    int zrwindow;		/* RX window size (controls garbage count) */
 
     int zctlesc;            /* Variable: TRUE means to encode control characters */
     int txfcs32;            /* Variable: TRUE means send binary frames with 32 bit FCS */
@@ -165,7 +161,7 @@ typedef struct zm_ {
 }zm_t;
 
 zm_t *zm_init(int fd, size_t readnum, size_t bufsize, int no_timeout,
-              int rxtimeout, int znulls, int eflag,int zctlesc, int zrwindow);
+              int rxtimeout, int znulls, int eflag,int zctlesc);
 void zm_deinit(zm_t *zm);
 int zm_get_zctlesc(zm_t *zm);
 void zm_set_zctlesc(zm_t *zm, int zctlesc);
